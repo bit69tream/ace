@@ -3,6 +3,8 @@ package ace
 import "core:fmt"
 aseData := #load("./tilemap.ase", []u8)
 
+// SPEC: https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md
+
 HEADER_MAGIC_NUMBER: u16le : 0xA5E0
 
 AseFlags :: enum u32le {
@@ -12,7 +14,7 @@ AseFlags :: enum u32le {
 }
 AseFlagsSet :: distinct bit_set[AseFlags;u32le]
 
-// https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md#header
+
 AseHeader :: struct #packed {
     // DWORD       File size
     fileSize:     u32le,
@@ -72,8 +74,7 @@ AseHeader :: struct #packed {
 
 FRAME_MAGIC_NUMBER: u16le : 0xF1FA
 
-// https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md#frames
-AseFrame :: struct #packed {
+AseFrameHeader :: struct #packed {
     // DWORD       Bytes in this frame
     bytes:         u32le,
     // WORD        Magic number (always 0xF1FA)
@@ -92,13 +93,131 @@ AseFrame :: struct #packed {
     chunksNew:     u32le,
 }
 
-#assert(size_of(AseFrame) == 16)
+#assert(size_of(AseFrameHeader) == 16)
+
+AseFrame :: struct {
+    using header: AseFrameHeader,
+}
+
+AseChunkType :: enum u16le {
+    OldPalette256 = 0x0004,
+    OldPalette64  = 0x0011,
+    Layer         = 0x2004,
+    Cel           = 0x2005,
+    CelExtra      = 0x2006,
+    ColorProfile  = 0x2007,
+    ExternalFiles = 0x2008,
+    Mask          = 0x2016,
+    Path          = 0x2017,
+    Tags          = 0x2018,
+    Palette       = 0x2019,
+    UserData      = 0x2020,
+    Slice         = 0x2022,
+    Tileset       = 0x2023,
+}
 
 AseChunkHeader :: struct #packed {
     // DWORD       Chunk size
     size: u32le,
     // WORD        Chunk type
-    type: u16le,
+    type: AseChunkType,
+}
+
+AseChunkOldPalette256Packet :: struct #packed {
+    // + For each packet
+    //   BYTE      Number of palette entries to skip from the last packet (start from 0)
+    skipCount:  u8,
+    //   BYTE      Number of colors in the packet (0 means 256)
+    colorCount: u8,
+    //   + For each color in the packet
+    //     BYTE    Red (0-255)
+    red:        u8,
+    //     BYTE    Green (0-255)
+    green:      u8,
+    //     BYTE    Blue (0-255)
+    blue:       u8,
+}
+
+AseChunkOldPalette256 :: struct {
+    // WORD        Number of packets
+    packetCount: u16le,
+    packets:     []AseChunkOldPalette256Packet,
+}
+
+AseChunkOldPalette64Packet :: struct #packed {
+    // + For each packet
+    //   BYTE      Number of palette entries to skip from the last packet (start from 0)
+    skipCount:  u8,
+    //   BYTE      Number of colors in the packet (0 means 256)
+    colorCount: u8,
+    //   + For each color in the packet
+    //     BYTE    Red (0-255)
+    red:        u8,
+    //     BYTE    Green (0-255)
+    green:      u8,
+    //     BYTE    Blue (0-255)
+    blue:       u8,
+}
+
+AseChunkOldPalette64 :: struct {
+    // WORD        Number of packets
+    packetCount: u16le,
+    packets:     []AseChunkOldPalette64Packet,
+}
+
+AseChunkLayer :: struct {
+    // WORD        Flags:
+    //               1 = Visible
+    //               2 = Editable
+    //               4 = Lock movement
+    //               8 = Background
+    //               16 = Prefer linked cels
+    //               32 = The layer group should be displayed collapsed
+    //               64 = The layer is a reference layer
+    // WORD        Layer type
+    //               0 = Normal (image) layer
+    //               1 = Group
+    //               2 = Tilemap
+    // WORD        Layer child level (see NOTE.1)
+    // WORD        Default layer width in pixels (ignored)
+    // WORD        Default layer height in pixels (ignored)
+    // WORD        Blend mode (see NOTE.6)
+    //               Normal         = 0
+    //               Multiply       = 1
+    //               Screen         = 2
+    //               Overlay        = 3
+    //               Darken         = 4
+    //               Lighten        = 5
+    //               Color Dodge    = 6
+    //               Color Burn     = 7
+    //               Hard Light     = 8
+    //               Soft Light     = 9
+    //               Difference     = 10
+    //               Exclusion      = 11
+    //               Hue            = 12
+    //               Saturation     = 13
+    //               Color          = 14
+    //               Luminosity     = 15
+    //               Addition       = 16
+    //               Subtract       = 17
+    //               Divide         = 18
+    // BYTE        Opacity (see NOTE.6)
+    // BYTE[3]     For future (set to zero)
+    // STRING      Layer name
+    // + If layer type = 2
+    //   DWORD     Tileset index
+    // + If file header flags have bit 4:
+    //   UUID      Layer's universally unique identifier
+}
+
+AseChunkPayload :: union #no_nil {
+    AseChunkOldPalette256,
+    AseChunkOldPalette64,
+}
+
+AseChunk :: struct {
+    using header: AseChunkHeader,
+    payload:      AseChunkPayload,
 }
 
 #assert(size_of(AseChunkHeader) == 6)
