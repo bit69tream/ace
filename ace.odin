@@ -247,11 +247,11 @@ LayerFlagsSet :: distinct bit_set[LayerFlags;Word]
 LayerType :: enum Word {
     // WORD        Layer type
     //               0 = Normal (image) layer
-    Normal,
+    Normal  = 0,
     //               1 = Group
-    Group,
+    Group   = 1,
     //               2 = Tilemap
-    Tilemap,
+    Tilemap = 2,
 }
 
 LayerBlendMode :: enum Word {
@@ -521,7 +521,7 @@ Chunk :: struct {
 #assert(size_of(ChunkHeader) == 6)
 
 readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
-    out = (cast(^Header)raw_data(data))^
+    out = dataAs(data, Header)
     assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
     advance = size_of(Header)
 
@@ -531,7 +531,7 @@ readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
 }
 
 readFrame :: proc(data: []u8) -> (out: Frame, advance: uintptr) {
-    out.header = (cast(^FrameHeader)raw_data(data))^
+    out.header = dataAs(data, FrameHeader)
     assert(out.header.magicNumber == FRAME_MAGIC_NUMBER, message = "Invalid frame magic number!")
     advance = size_of(FrameHeader)
 
@@ -549,26 +549,26 @@ readFrame :: proc(data: []u8) -> (out: Frame, advance: uintptr) {
 }
 
 readChunkColorProfile :: proc(data: []u8) -> (out: ChunkColorProfile) {
-    out = (cast(^ChunkColorProfile)raw_data(data))^
+    out = dataAs(data, ChunkColorProfile)
     assert(out.type != .EmbeddedICC, "Embedded ICC profiles are not supported")
 
     return
 }
 
 readString :: proc(data: []u8) -> (out: string) {
-    length := uintptr((cast(^Word)raw_data(data))^)
+    length := uintptr(dataAs(data, Word))
     out = string(data[2:length + 2])
 
     return
 }
 
 readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
-    out = (cast(^ChunkPalette)raw_data(data))^
+    out = dataAs(data, ChunkPalette)
     out.entries = make([]ChunkPaletteEntry, out.length)
 
     readPaletteEntry :: proc(data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
         nameOffset :: offset_of(ChunkPaletteEntry, name)
-        out = (cast(^ChunkPaletteEntry)raw_data(data))^
+        out = dataAs(data, ChunkPaletteEntry)
         if out.flags == .HasName {
             out.name = readString(data[nameOffset:])
         } else {
@@ -588,21 +588,25 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     return
 }
 
+dataAs :: #force_inline proc(data: []u8, $T: typeid) -> T {
+    return (cast(^T)raw_data(data))^
+}
+
 readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
     offset: uintptr = 0
 
-    out.flags = (cast(^LayerFlagsSet)raw_data(data[offset:]))^;offset += size_of(LayerFlagsSet)
-    out.type = (cast(^LayerType)raw_data(data[offset:]))^;offset += size_of(LayerType)
-    out.childLevel = (cast(^Word)raw_data(data[offset:]))^;offset += size_of(Word)
-    out.width = (cast(^Word)raw_data(data[offset:]))^;offset += size_of(Word)
-    out.height = (cast(^Word)raw_data(data[offset:]))^;offset += size_of(Word)
-    out.blendMode = (cast(^LayerBlendMode)raw_data(data[offset:]))^;offset += size_of(LayerBlendMode)
-    out.opacity = (cast(^Byte)raw_data(data[offset:]))^;offset += size_of(Byte)
-    offset += size_of(Byte)*3
-    out.name = readString(data[offset:]); offset += uintptr(len(out.name))
+    out.flags = dataAs(data[offset:], LayerFlagsSet);offset += size_of(LayerFlagsSet)
+    out.type = dataAs(data[offset:], LayerType);offset += size_of(LayerType)
+    out.childLevel = dataAs(data[offset:], Word);offset += size_of(Word)
+    out.width = dataAs(data[offset:], Word);offset += size_of(Word)
+    out.height = dataAs(data[offset:], Word);offset += size_of(Word)
+    out.blendMode = dataAs(data[offset:], LayerBlendMode);offset += size_of(LayerBlendMode)
+    out.opacity = dataAs(data[offset:], Byte);offset += size_of(Byte)
+    offset += size_of(Byte) * 3
+    out.name = readString(data[offset:]);offset += uintptr(len(out.name))
 
     if out.type == .Tilemap {
-        out.tilesetIndex = (cast(^Dword)raw_data(data[offset:]))^;offset += size_of(Dword)
+        out.tilesetIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
     }
 
     // [TODO]: UUID for layers
@@ -613,7 +617,7 @@ readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
 }
 
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
-    out.header = (cast(^ChunkHeader)raw_data(data))^
+    out.header = dataAs(data, ChunkHeader)
     advance = uintptr(out.header.size)
 
     payloadOffset := size_of(ChunkHeader)
@@ -659,10 +663,11 @@ main :: proc() {
     assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
     pointer += offset
 
+    fmt.printfln("%#v", header)
+
     frame: Frame
     frame, offset = readFrame(aseData[pointer:])
     pointer += offset
 
-    fmt.printfln("%#v", header)
     fmt.printfln("%#v", frame)
 }
