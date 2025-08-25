@@ -228,19 +228,19 @@ ChunkOldPalette64 :: struct {
 LayerFlags :: enum Word {
     // WORD        Flags:
     //               1 = Visible
-    Visible             = 1,
+    Visible             = 0,
     //               2 = Editable
-    Editable            = 2,
+    Editable            = 1,
     //               4 = Lock movement
-    LockMovement        = 3,
+    LockMovement        = 2,
     //               8 = Background
-    Background          = 4,
+    Background          = 3,
     //               16 = Prefer linked cels
-    PreferLinkedCels    = 5,
+    PreferLinkedCels    = 4,
     //               32 = The layer group should be displayed collapsed
-    LayerGroupCollapsed = 6,
+    LayerGroupCollapsed = 5,
     //               64 = The layer is a reference layer
-    ReferenceLayer      = 7,
+    ReferenceLayer      = 6,
 }
 LayerFlagsSet :: distinct bit_set[LayerFlags;Word]
 
