@@ -65,15 +65,15 @@ uuid :: #type [16]byte
 
 HEADER_MAGIC_NUMBER: u16le : 0xA5E0
 
-AseFlags :: enum u32le {
+HeaderFlags :: enum u32le {
     LayerOpacityValid               = 0,
     LayerBlendOpacityValidForGroups = 1,
     LayersHaveUUID                  = 2,
 }
-AseFlagsSet :: distinct bit_set[AseFlags;u32le]
+HeaderFlagsSet :: distinct bit_set[HeaderFlags;u32le]
 
 
-AseHeader :: struct #packed {
+Header :: struct #packed {
     // DWORD       File size
     fileSize:     u32le,
     // WORD        Magic number (0xA5E0)
@@ -94,7 +94,7 @@ AseHeader :: struct #packed {
     //               2 = Layer blend mode/opacity is valid for groups
     //                   (composite groups separately first when rendering)
     //               4 = Layers have an UUID
-    flags:        AseFlagsSet,
+    flags:        HeaderFlagsSet,
     // WORD        Speed (milliseconds between frame, like in FLC files)
     //             DEPRECATED: You should use the frame duration field
     //             from each frame header
@@ -128,11 +128,11 @@ AseHeader :: struct #packed {
     _:            [84]u8,
 }
 
-#assert(size_of(AseHeader) == 128)
+#assert(size_of(Header) == 128)
 
 FRAME_MAGIC_NUMBER: u16le : 0xF1FA
 
-AseFrameHeader :: struct #packed {
+FrameHeader :: struct #packed {
     // DWORD       Bytes in this frame
     bytes:         u32le,
     // WORD        Magic number (always 0xF1FA)
@@ -151,13 +151,13 @@ AseFrameHeader :: struct #packed {
     chunksNew:     u32le,
 }
 
-#assert(size_of(AseFrameHeader) == 16)
+#assert(size_of(FrameHeader) == 16)
 
-AseFrame :: struct {
-    using header: AseFrameHeader,
+Frame :: struct {
+    using header: FrameHeader,
 }
 
-AseChunkType :: enum u16le {
+ChunkType :: enum u16le {
     OldPalette256 = 0x0004,
     OldPalette64  = 0x0011,
     Layer         = 0x2004,
@@ -174,14 +174,14 @@ AseChunkType :: enum u16le {
     Tileset       = 0x2023,
 }
 
-AseChunkHeader :: struct #packed {
+ChunkHeader :: struct #packed {
     // DWORD       Chunk size
     size: u32le,
     // WORD        Chunk type
-    type: AseChunkType,
+    type: ChunkType,
 }
 
-AseChunkOldPalette256Packet :: struct #packed {
+ChunkOldPalette256Packet :: struct #packed {
     // + For each packet
     //   BYTE      Number of palette entries to skip from the last packet (start from 0)
     skipCount:  u8,
@@ -196,13 +196,13 @@ AseChunkOldPalette256Packet :: struct #packed {
     blue:       u8,
 }
 
-AseChunkOldPalette256 :: struct {
+ChunkOldPalette256 :: struct {
     // WORD        Number of packets
     packetCount: u16le,
-    packets:     []AseChunkOldPalette256Packet,
+    packets:     []ChunkOldPalette256Packet,
 }
 
-AseChunkOldPalette64Packet :: struct #packed {
+ChunkOldPalette64Packet :: struct #packed {
     // + For each packet
     //   BYTE      Number of palette entries to skip from the last packet (start from 0)
     skipCount:  u8,
@@ -217,71 +217,166 @@ AseChunkOldPalette64Packet :: struct #packed {
     blue:       u8,
 }
 
-AseChunkOldPalette64 :: struct {
+ChunkOldPalette64 :: struct {
     // WORD        Number of packets
     packetCount: u16le,
-    packets:     []AseChunkOldPalette64Packet,
+    packets:     []ChunkOldPalette64Packet,
 }
 
-AseChunkLayer :: struct {
+LayerFlags :: enum u16le {
     // WORD        Flags:
     //               1 = Visible
+    Visible             = 1,
     //               2 = Editable
+    Editable            = 2,
     //               4 = Lock movement
+    LockMovement        = 3,
     //               8 = Background
+    Background          = 4,
     //               16 = Prefer linked cels
+    PreferLinkedCels    = 5,
     //               32 = The layer group should be displayed collapsed
+    LayerGroupCollapsed = 6,
     //               64 = The layer is a reference layer
+    ReferenceLayer      = 7,
+}
+LayerFlagsSet :: distinct bit_set[LayerFlags;u16le]
+
+LayerType :: enum u16le {
     // WORD        Layer type
     //               0 = Normal (image) layer
+    Normal,
     //               1 = Group
+    Group,
     //               2 = Tilemap
-    // WORD        Layer child level (see NOTE.1)
-    // WORD        Default layer width in pixels (ignored)
-    // WORD        Default layer height in pixels (ignored)
+    Tilemap,
+}
+
+LayerBlendMode :: enum u16le {
     // WORD        Blend mode (see NOTE.6)
     //               Normal         = 0
+    Normal     = 0,
     //               Multiply       = 1
-    //               Screen         = 2
+    Multiply   = 1,
+    //               Screen         = 2,
+    Screen     = 2,
     //               Overlay        = 3
+    Overlay    = 3,
     //               Darken         = 4
+    Darken     = 4,
     //               Lighten        = 5
+    Lighten    = 5,
     //               Color Dodge    = 6
+    ColorDodge = 6,
     //               Color Burn     = 7
+    ColorBurn  = 7,
     //               Hard Light     = 8
+    HardLight  = 8,
     //               Soft Light     = 9
+    SoftLight  = 9,
     //               Difference     = 10
+    Difference = 10,
     //               Exclusion      = 11
+    Exclusion  = 11,
     //               Hue            = 12
+    Hue        = 12,
     //               Saturation     = 13
+    Saturation = 13,
     //               Color          = 14
+    Color      = 14,
     //               Luminosity     = 15
+    Luminosity = 15,
     //               Addition       = 16
+    Addition   = 16,
     //               Subtract       = 17
+    Subtract   = 17,
     //               Divide         = 18
+    Divide     = 18,
+}
+
+ChunkLayer :: struct {
+    // WORD
+    flags:        LayerFlagsSet,
+    // WORD
+    type:         LayerType,
+    // WORD        Layer child level (see NOTE.1)
+    childLevel:   u16le,
+    // WORD        Default layer width in pixels (ignored)
+    width:        u16le,
+    // WORD        Default layer height in pixels (ignored)
+    height:       u16le,
+    // WORD
+    blendMode:    LayerBlendMode,
     // BYTE        Opacity (see NOTE.6)
+    opacity:      u8,
     // BYTE[3]     For future (set to zero)
+    _:            [3]u8,
     // STRING      Layer name
+    name:         string,
     // + If layer type = 2
     //   DWORD     Tileset index
+    tilesetIndex: u32le,
     // + If file header flags have bit 4:
     //   UUID      Layer's universally unique identifier
+    uuid:         [16]u8,
 }
 
-AseChunkPayload :: union #no_nil {
-    AseChunkOldPalette256,
-    AseChunkOldPalette64,
+ChunkCel :: struct {
+    // WORD        Layer index (see NOTE.2)
+    index: u16le,
+    // SHORT       X position
+    // SHORT       Y position
+    // BYTE        Opacity level
+    // WORD        Cel Type
+    //             0 - Raw Image Data (unused, compressed image is preferred)
+    //             1 - Linked Cel
+    //             2 - Compressed Image
+    //             3 - Compressed Tilemap
+    // SHORT       Z-Index (see NOTE.5)
+    //             0 = default layer ordering
+    //             +N = show this cel N layers later
+    //             -N = show this cel N layers back
+    // BYTE[5]     For future (set to zero)
+    // + For cel type = 0 (Raw Image Data)
+    //   WORD      Width in pixels
+    //   WORD      Height in pixels
+    //   PIXEL[]   Raw pixel data: row by row from top to bottom,
+    //             for each scanline read pixels from left to right.
+    // + For cel type = 1 (Linked Cel)
+    //   WORD      Frame position to link with
+    // + For cel type = 2 (Compressed Image)
+    //   WORD      Width in pixels
+    //   WORD      Height in pixels
+    //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
+    // + For cel type = 3 (Compressed Tilemap)
+    //   WORD      Width in number of tiles
+    //   WORD      Height in number of tiles
+    //   WORD      Bits per tile (at the moment it's always 32-bit per tile)
+    //   DWORD     Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
+    //   DWORD     Bitmask for X flip
+    //   DWORD     Bitmask for Y flip
+    //   DWORD     Bitmask for diagonal flip (swap X/Y axis)
+    //   BYTE[10]  Reserved
+    //   TILE[]    Row by row, from top to bottom tile by tile
+    //             compressed with ZLIB method (see NOTE.3)
 }
 
-AseChunk :: struct {
-    using header: AseChunkHeader,
-    payload:      AseChunkPayload,
+ChunkPayload :: union #no_nil {
+    ChunkOldPalette256,
+    ChunkOldPalette64,
+    ChunkLayer,
+    ChunkCel,
 }
 
-#assert(size_of(AseChunkHeader) == 6)
+Chunk :: struct {
+    using header: ChunkHeader,
+    payload:      ChunkPayload,
+}
+
+#assert(size_of(ChunkHeader) == 6)
 
 main :: proc() {
-    header := cast(^AseHeader)raw_data(aseData)
+    header := cast(^Header)raw_data(aseData)
     assert(header.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
     assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
 
