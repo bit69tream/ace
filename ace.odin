@@ -525,7 +525,7 @@ readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
     assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
     advance = size_of(Header)
 
-    assert(.LayersHaveUUID in out.flags, message = "Layers with UUID are not currently supported")
+    assert(.LayersHaveUUID not_in out.flags, message = "Layers with UUID are not currently supported")
 
     return
 }
