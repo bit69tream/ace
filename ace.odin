@@ -321,44 +321,94 @@ ChunkLayer :: struct {
     uuid:         Uuid,
 }
 
-ChunkCel :: struct {
-    // WORD        Layer index (see NOTE.2)
-    index: Word,
-    // SHORT       X position
-    // SHORT       Y position
-    // BYTE        Opacity level
+ChunkCelType :: enum Word {
     // WORD        Cel Type
     //             0 - Raw Image Data (unused, compressed image is preferred)
+    Raw               = 0,
     //             1 - Linked Cel
+    Linked            = 1,
     //             2 - Compressed Image
+    CompressedImage   = 2,
     //             3 - Compressed Tilemap
+    CompressedTilemap = 3,
+}
+
+ChunkCelPayloadRaw :: struct {
+    // + For cel type = 0 (Raw Image Data)
+    //   WORD      Width in pixels
+    width:  Word,
+    //   WORD      Height in pixels
+    height: Word,
+    //   PIXEL[]   Raw pixel data: row by row from top to bottom,
+    //             for each scanline read pixels from left to right.
+    data:   []Pixel,
+}
+
+ChunkCelPayloadLinked :: struct {
+    // + For cel type = 1 (Linked Cel)
+    //   WORD      Frame position to link with
+    framePosition: Word,
+}
+
+ChunkCelPayloadCompressedImage :: struct {
+    // + For cel type = 2 (Compressed Image)
+    //   WORD      Width in pixels
+    width:  Word,
+    //   WORD      Height in pixels
+    height: Word,
+    //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
+    data:   []Pixel,
+}
+
+ChunkCelPayloadCompressedTilemap :: struct {
+    // + For cel type = 3 (Compressed Tilemap)
+    //   WORD      Width in number of tiles
+    width:               Word,
+    //   WORD      Height in number of tiles
+    height:              Word,
+    //   WORD      Bits per tile (at the moment it's always 32-bit per tile)
+    bitsPerTile:         Word,
+    //   DWORD     Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
+    tileIDBitmask:       Dword,
+    //   DWORD     Bitmask for X flip
+    xFlipBitmask:        Dword,
+    //   DWORD     Bitmask for Y flip
+    yFlipBitmask:        Dword,
+    //   DWORD     Bitmask for diagonal flip (swap X/Y axis)
+    diagonalFlipBitmask: Dword,
+    //   BYTE[10]  Reserved
+    _:                   [10]Byte,
+    //   TILE[]    Row by row, from top to bottom tile by tile
+    //             compressed with ZLIB method (see NOTE.3)
+    data:                []Tile,
+}
+
+ChunkCelPayload :: union #no_nil {
+    ChunkCelPayloadRaw,
+    ChunkCelPayloadLinked,
+    ChunkCelPayloadCompressedImage,
+    ChunkCelPayloadCompressedTilemap,
+}
+
+ChunkCel :: struct {
+    // WORD        Layer index (see NOTE.2)
+    index:   Word,
+    // SHORT       X position
+    x:       Short,
+    // SHORT       Y position
+    y:       Short,
+    // BYTE        Opacity level
+    opacity: Byte,
+    // WORD
+    type:    ChunkCelType,
     // SHORT       Z-Index (see NOTE.5)
     //             0 = default layer ordering
     //             +N = show this cel N layers later
     //             -N = show this cel N layers back
+    z:       Short,
     // BYTE[5]     For future (set to zero)
-    // + For cel type = 0 (Raw Image Data)
-    //   WORD      Width in pixels
-    //   WORD      Height in pixels
-    //   PIXEL[]   Raw pixel data: row by row from top to bottom,
-    //             for each scanline read pixels from left to right.
-    // + For cel type = 1 (Linked Cel)
-    //   WORD      Frame position to link with
-    // + For cel type = 2 (Compressed Image)
-    //   WORD      Width in pixels
-    //   WORD      Height in pixels
-    //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
-    // + For cel type = 3 (Compressed Tilemap)
-    //   WORD      Width in number of tiles
-    //   WORD      Height in number of tiles
-    //   WORD      Bits per tile (at the moment it's always 32-bit per tile)
-    //   DWORD     Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
-    //   DWORD     Bitmask for X flip
-    //   DWORD     Bitmask for Y flip
-    //   DWORD     Bitmask for diagonal flip (swap X/Y axis)
-    //   BYTE[10]  Reserved
-    //   TILE[]    Row by row, from top to bottom tile by tile
-    //             compressed with ZLIB method (see NOTE.3)
+    _:       [5]Byte,
+    payload: ChunkCelPayload,
 }
 
 ChunkPayload :: union #no_nil {
