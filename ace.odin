@@ -433,12 +433,49 @@ ChunkCelExtra :: struct {
     _:      [16]Byte,
 }
 
+ChunkColorProfileType :: enum Word {
+    // WORD        Type
+    //               0 - no color profile (as in old .aseprite files)
+    NoProfile   = 0,
+    //               1 - use sRGB
+    sRGB        = 1,
+    //               2 - use the embedded ICC profile
+    EmbeddedICC = 2,
+}
+
+ChunkColorProfileFlags :: enum Word {
+    // WORD        Flags
+    //               1 - use special fixed gamma
+    UseFixedGamma = 1,
+}
+
+ChunkColorProfile :: struct #packed {
+    // WORD
+    type: ChunkColorProfileType,
+    // WORD
+    flags: ChunkColorProfileFlags,
+    // FIXED       Fixed gamma (1.0 = linear)
+    //             Note: The gamma in sRGB is 2.2 in overall but it doesn't use
+    //             this fixed gamma, because sRGB uses different gamma sections
+    //             (linear and non-linear). If sRGB is specified with a fixed
+    //             gamma = 1.0, it means that this is Linear sRGB.
+    gamma: Fixed,
+    // BYTE[8]     Reserved (set to zero)
+    _: [8]Byte,
+
+    // [TODO]: ICC is unsupported
+    // + If type = ICC:
+    //   DWORD     ICC profile data length
+    //   BYTE[]    ICC profile data. More info: http://www.color.org/ICC1V42.pdf
+}
+
 ChunkPayload :: union #no_nil {
     ChunkOldPalette256,
     ChunkOldPalette64,
     ChunkLayer,
     ChunkCel,
     ChunkCelExtra,
+    ChunkColorProfile,
 }
 
 Chunk :: struct {
@@ -465,7 +502,7 @@ readFrame :: proc(data: []u8) -> (out: Frame, advance: u32) {
     if chunkCount == 0 do chunkCount = u32(out.header.chunksOld)
     out.chunks = make([]Chunk, chunkCount)
 
-    for i in 0..<chunkCount {
+    for i in 0 ..< chunkCount {
         chunk, offset := readChunk(data[advance:])
         out.chunks[i] = chunk
         advance += offset
@@ -474,9 +511,49 @@ readFrame :: proc(data: []u8) -> (out: Frame, advance: u32) {
     return
 }
 
+readChunkColorProfile :: proc(data: []u8) -> (out: ChunkColorProfile) {
+    out = (cast(^ChunkColorProfile)raw_data(data))^
+    assert(out.type != .EmbeddedICC, "Embedded ICC profiles are not supported")
+
+    return
+}
+
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: u32) {
     out.header = (cast(^ChunkHeader)raw_data(data))^
     advance = u32(out.header.size)
+
+    payloadOffset := size_of(ChunkHeader)
+    switch out.header.type {
+    case .OldPalette256:
+        assert(false, "[TODO]: OldPalette256 chunk not supported")
+    case .OldPalette64:
+        assert(false, "[TODO]: OldPalette64 chunk not supported")
+    case .Layer:
+        assert(false, "[TODO]: Layer chunk not supported")
+    case .Cel:
+        assert(false, "[TODO]: Cel chunk not supported")
+    case .CelExtra:
+        assert(false, "[TODO]: CelExtra chunk not supported")
+    case .ColorProfile:
+        out.payload = readChunkColorProfile(data[payloadOffset:])
+    case .ExternalFiles:
+        assert(false, "[TODO]: ExternalFiles chunk not supported")
+    case .Mask:
+        assert(false, "[TODO]: Mask chunk not supported")
+    case .Path:
+        assert(false, "[TODO]: Path chunk not supported")
+    case .Tags:
+        assert(false, "[TODO]: Tags chunk not supported")
+    case .Palette:
+        assert(false, "[TODO]: Palette chunk not supported")
+    case .UserData:
+        assert(false, "[TODO]: UserData chunk not supported")
+    case .Slice:
+        assert(false, "[TODO]: Slice chunk not supported")
+    case .Tileset:
+        assert(false, "[TODO]: Tileset chunk not supported")
+    }
+    fmt.printfln("%#v", out)
 
     return
 }
