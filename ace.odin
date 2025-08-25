@@ -10,85 +10,100 @@ aseData := #load("./tilemap.ase", []u8)
 // data types
 
 // BYTE: An 8-bit unsigned integer value
-byte :: #type u8
+Byte :: #type u8
 // WORD: A 16-bit unsigned integer value
-word :: #type u16le
+Word :: #type u16le
 // SHORT: A 16-bit signed integer value
-short :: #type i16le
+Short :: #type i16le
 // DWORD: A 32-bit unsigned integer value
-dword :: #type u32le
+Dword :: #type u32le
 // LONG: A 32-bit signed integer value
-long :: #type i32le
+Long :: #type i32le
 // FIXED: A 32-bit fixed point (16.16) value
-fixed :: #type fixed.Fixed16_16
+Fixed :: #type fixed.Fixed16_16
 // FLOAT: A 32-bit single-precision value
-float :: #type f32le
+Float :: #type f32le
 // DOUBLE: A 64-bit double-precision value
-double :: #type f64le
+Double :: #type f64le
 // QWORD: A 64-bit unsigned integer value
-qword :: #type u64le
+Qword :: #type u64le
 // LONG64: A 64-bit signed integer value
-long64 :: #type i64le
+Long64 :: #type i64le
 // POINT:
 //     LONG: X coordinate value
 //     LONG: Y coordinate value
-point :: struct {
-    x, y: long
+Point :: struct {
+    x, y: Long,
 }
 // SIZE:
 //     LONG: Width value
 //     LONG: Height value
-size :: struct {
-    width, height: long
+Size :: struct {
+    width, height: Long,
 }
 // RECT:
 //     POINT: Origin coordinates
 //     SIZE: Rectangle size
-rect :: struct {
-    origin: point,
-    sz: size,
+Rect :: struct {
+    origin: Point,
+    size:   Size,
 }
 // PIXEL: One pixel, depending on the image pixel format:
 //     RGBA: BYTE[4], each pixel have 4 bytes in this order Red, Green, Blue, Alpha.
 //     Grayscale: BYTE[2], each pixel have 2 bytes in the order Value, Alpha.
 //     Indexed: BYTE, each pixel uses 1 byte (the index).
 // [TODO]
+PixelRGBA :: struct {
+    r, g, b, a: Byte,
+}
+PixelGrayscale :: struct {
+    value, alpha: Byte,
+}
+PixelIndexed :: distinct Byte
+Pixel :: union #no_nil {
+    PixelRGBA,
+    PixelGrayscale,
+    PixelIndexed,
+}
 
 // TILE: Tilemaps: Each tile can be a 8-bit (BYTE), 16-bit (WORD), or 32-bit
 // (DWORD) value and there are masks related to the meaning of each bit.
-// [TODO]
+// Current spec states that at the moment TILE is always 32-bit, therefore i
+// think it's fine to only support that size
+// https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md#cel-chunk-0x2005
+Tile :: #type Dword
 
 // UUID: A Universally Unique Identifier stored as BYTE[16].
-uuid :: #type [16]byte
+Uuid :: #type [16]Byte
 
 // file structure
 
-HEADER_MAGIC_NUMBER: word : 0xA5E0
+HEADER_MAGIC_NUMBER: Word : 0xA5E0
 
-HeaderFlags :: enum dword {
+HeaderFlags :: enum Dword {
     LayerOpacityValid               = 0,
     LayerBlendOpacityValidForGroups = 1,
     LayersHaveUUID                  = 2,
 }
-HeaderFlagsSet :: distinct bit_set[HeaderFlags;dword]
+HeaderFlagsSet :: distinct bit_set[HeaderFlags;Dword]
 
 
 Header :: struct #packed {
     // DWORD       File size
-    fileSize:     dword,
+    fileSize:     Dword,
     // WORD        Magic number (0xA5E0)
-    magicNumber:  word,
+    magicNumber:  Word,
     // WORD        Frames
-    frames:       word,
+    frames:       Word,
     // WORD        Width in pixels
-    width:        word,
+    width:        Word,
     // WORD        Height in pixels
-    height:       word,
+    height:       Word,
     // WORD        Color depth (bits per pixel)
     //               32 bpp = RGBA
     //               16 bpp = Grayscale
     //               8 bpp = Indexed
-    colorDepth:   word,
+    colorDepth:   Word,
     // DWORD       Flags (see NOTE.6):
     //               1 = Layer opacity has valid value
     //               2 = Layer blend mode/opacity is valid for groups
@@ -98,57 +113,57 @@ Header :: struct #packed {
     // WORD        Speed (milliseconds between frame, like in FLC files)
     //             DEPRECATED: You should use the frame duration field
     //             from each frame header
-    speed:        word,
+    speed:        Word,
     // DWORD       Set be 0
-    _:            dword,
+    _:            Dword,
     // DWORD       Set be 0
-    _:            dword,
+    _:            Dword,
     // BYTE        Palette entry (index) which represent transparent color
     //             in all non-background layers (only for Indexed sprites).
-    paletteEntry: byte,
+    paletteEntry: Byte,
     // BYTE[3]     Ignore these bytes
-    _:            [3]byte,
+    _:            [3]Byte,
     // WORD        Number of colors (0 means 256 for old sprites)
-    colorCount:   word,
+    colorCount:   Word,
     // BYTE        Pixel width (pixel ratio is "pixel width/pixel height").
     //             If this or pixel height field is zero, pixel ratio is 1:1
-    pixelWidth:   byte,
+    pixelWidth:   Byte,
     // BYTE        Pixel height
-    pixelHeight:  byte,
+    pixelHeight:  Byte,
     // SHORT       X position of the grid
-    gridX:        short,
+    gridX:        Short,
     // SHORT       Y position of the grid
-    gridY:        short,
+    gridY:        Short,
     // WORD        Grid width (zero if there is no grid, grid size
     //             is 16x16 on Aseprite by default)
-    gridWidth:    word,
+    gridWidth:    Word,
     // WORD        Grid height (zero if there is no grid)
-    gridHeight:   word,
+    gridHeight:   Word,
     // BYTE[84]    For future (set to zero)
-    _:            [84]byte,
+    _:            [84]Byte,
 }
 
 #assert(size_of(Header) == 128)
 
-FRAME_MAGIC_NUMBER: word : 0xF1FA
+FRAME_MAGIC_NUMBER: Word : 0xF1FA
 
 FrameHeader :: struct #packed {
     // DWORD       Bytes in this frame
-    bytes:         dword,
+    bytes:         Dword,
     // WORD        Magic number (always 0xF1FA)
-    magicNumber:   word,
+    magicNumber:   Word,
     // WORD        Old field which specifies the number of "chunks"
     //             in this frame. If this value is 0xFFFF, we might
     //             have more chunks to read in this frame
     //             (so we have to use the new field)
-    chunksOld:     word,
+    chunksOld:     Word,
     // WORD        Frame duration (in milliseconds)
-    frameDuration: word,
+    frameDuration: Word,
     // BYTE[2]     For future (set to zero)
-    _:             [2]byte,
+    _:             [2]Byte,
     // DWORD       New field which specifies the number of "chunks"
     //             in this frame (if this is 0, use the old field)
-    chunksNew:     dword,
+    chunksNew:     Dword,
 }
 
 #assert(size_of(FrameHeader) == 16)
@@ -157,7 +172,7 @@ Frame :: struct {
     using header: FrameHeader,
 }
 
-ChunkType :: enum word {
+ChunkType :: enum Word {
     OldPalette256 = 0x0004,
     OldPalette64  = 0x0011,
     Layer         = 0x2004,
@@ -176,7 +191,7 @@ ChunkType :: enum word {
 
 ChunkHeader :: struct #packed {
     // DWORD       Chunk size
-    size: dword,
+    size: Dword,
     // WORD        Chunk type
     type: ChunkType,
 }
@@ -184,31 +199,31 @@ ChunkHeader :: struct #packed {
 ChunkOldPalettePacket :: struct #packed {
     // + For each packet
     //   BYTE      Number of palette entries to skip from the last packet (start from 0)
-    skipCount:  byte,
+    skipCount:  Byte,
     //   BYTE      Number of colors in the packet (0 means 256 (or 64))
-    colorCount: byte,
+    colorCount: Byte,
     //   + For each color in the packet
     //     BYTE    Red (0-255 (or 63))
-    red:        byte,
+    red:        Byte,
     //     BYTE    Green (0-255 (or 63))
-    green:      byte,
+    green:      Byte,
     //     BYTE    Blue (0-255 (or 63))
-    blue:       byte,
+    blue:       Byte,
 }
 
 ChunkOldPalette256 :: struct {
     // WORD        Number of packets
-    packetCount: word,
+    packetCount: Word,
     packets:     []ChunkOldPalettePacket,
 }
 
 ChunkOldPalette64 :: struct {
     // WORD        Number of packets
-    packetCount: word,
+    packetCount: Word,
     packets:     []ChunkOldPalettePacket,
 }
 
-LayerFlags :: enum word {
+LayerFlags :: enum Word {
     // WORD        Flags:
     //               1 = Visible
     Visible             = 1,
@@ -225,9 +240,9 @@ LayerFlags :: enum word {
     //               64 = The layer is a reference layer
     ReferenceLayer      = 7,
 }
-LayerFlagsSet :: distinct bit_set[LayerFlags;word]
+LayerFlagsSet :: distinct bit_set[LayerFlags;Word]
 
-LayerType :: enum word {
+LayerType :: enum Word {
     // WORD        Layer type
     //               0 = Normal (image) layer
     Normal,
@@ -237,7 +252,7 @@ LayerType :: enum word {
     Tilemap,
 }
 
-LayerBlendMode :: enum word {
+LayerBlendMode :: enum Word {
     // WORD        Blend mode (see NOTE.6)
     //               Normal         = 0
     Normal     = 0,
@@ -285,30 +300,30 @@ ChunkLayer :: struct {
     // WORD
     type:         LayerType,
     // WORD        Layer child level (see NOTE.1)
-    childLevel:   word,
+    childLevel:   Word,
     // WORD        Default layer width in pixels (ignored)
-    width:        word,
+    width:        Word,
     // WORD        Default layer height in pixels (ignored)
-    height:       word,
+    height:       Word,
     // WORD
     blendMode:    LayerBlendMode,
     // BYTE        Opacity (see NOTE.6)
-    opacity:      byte,
+    opacity:      Byte,
     // BYTE[3]     For future (set to zero)
-    _:            [3]byte,
+    _:            [3]Byte,
     // STRING      Layer name
     name:         string,
     // + If layer type = 2
     //   DWORD     Tileset index
-    tilesetIndex: dword,
+    tilesetIndex: Dword,
     // + If file header flags have bit 4:
     //   UUID      Layer's universally unique identifier
-    uuid:         uuid,
+    uuid:         Uuid,
 }
 
 ChunkCel :: struct {
     // WORD        Layer index (see NOTE.2)
-    index: word,
+    index: Word,
     // SHORT       X position
     // SHORT       Y position
     // BYTE        Opacity level
