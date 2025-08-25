@@ -1,8 +1,9 @@
 package ace
 
+import "core:fmt"
 import "core:math/fixed"
 
-import "core:fmt"
+@(rodata)
 aseData := #load("./tilemap.ase", []u8)
 
 // SPEC: https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md
@@ -149,7 +150,7 @@ FRAME_MAGIC_NUMBER: Word : 0xF1FA
 
 FrameHeader :: struct #packed {
     // DWORD       Bytes in this frame
-    bytes:         Dword,
+    byteCount:     Dword,
     // WORD        Magic number (always 0xF1FA)
     magicNumber:   Word,
     // WORD        Old field which specifies the number of "chunks"
@@ -170,6 +171,7 @@ FrameHeader :: struct #packed {
 
 Frame :: struct {
     using header: FrameHeader,
+    chunks:       []Chunk,
 }
 
 ChunkType :: enum Word {
@@ -446,10 +448,49 @@ Chunk :: struct {
 
 #assert(size_of(ChunkHeader) == 6)
 
+readHeader :: proc(data: []u8) -> (out: Header, advance: u32) {
+    out = (cast(^Header)raw_data(data))^
+    assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
+    advance = size_of(Header)
+
+    return
+}
+
+readFrame :: proc(data: []u8) -> (out: Frame, advance: u32) {
+    out.header = (cast(^FrameHeader)raw_data(data))^
+    assert(out.header.magicNumber == FRAME_MAGIC_NUMBER, message = "Invalid frame magic number!")
+    advance = size_of(FrameHeader)
+
+    chunkCount := u32(out.header.chunksNew)
+    if chunkCount == 0 do chunkCount = u32(out.header.chunksOld)
+    out.chunks = make([]Chunk, chunkCount)
+
+    for i in 0..<chunkCount {
+        chunk, offset := readChunk(data[advance:])
+        out.chunks[i] = chunk
+        advance += offset
+    }
+
+    return
+}
+
+readChunk :: proc(data: []u8) -> (out: Chunk, advance: u32) {
+    out.header = (cast(^ChunkHeader)raw_data(data))^
+    advance = u32(out.header.size)
+
+    return
+}
+
 main :: proc() {
-    header := cast(^Header)raw_data(aseData)
-    assert(header.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
+    pointer: u32 = 0
+    header, offset := readHeader(aseData)
     assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
+    pointer += offset
+
+    frame: Frame
+    frame, offset = readFrame(aseData[pointer:])
+    pointer += offset
 
     fmt.printfln("%#v", header)
+    fmt.printfln("%#v", frame)
 }
