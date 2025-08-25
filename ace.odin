@@ -1,9 +1,67 @@
 package ace
 
+import "core:math/fixed"
+
 import "core:fmt"
 aseData := #load("./tilemap.ase", []u8)
 
 // SPEC: https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md
+
+// data types
+
+// BYTE: An 8-bit unsigned integer value
+byte :: #type u8
+// WORD: A 16-bit unsigned integer value
+word :: #type u16le
+// SHORT: A 16-bit signed integer value
+short :: #type i16le
+// DWORD: A 32-bit unsigned integer value
+dword :: #type u32le
+// LONG: A 32-bit signed integer value
+long :: #type i32le
+// FIXED: A 32-bit fixed point (16.16) value
+fixed :: #type fixed.Fixed16_16
+// FLOAT: A 32-bit single-precision value
+float :: #type f32le
+// DOUBLE: A 64-bit double-precision value
+double :: #type f64le
+// QWORD: A 64-bit unsigned integer value
+qword :: #type u64le
+// LONG64: A 64-bit signed integer value
+long64 :: #type i64le
+// POINT:
+//     LONG: X coordinate value
+//     LONG: Y coordinate value
+point :: struct {
+    x, y: long
+}
+// SIZE:
+//     LONG: Width value
+//     LONG: Height value
+size :: struct {
+    width, height: long
+}
+// RECT:
+//     POINT: Origin coordinates
+//     SIZE: Rectangle size
+rect :: struct {
+    origin: point,
+    sz: size,
+}
+// PIXEL: One pixel, depending on the image pixel format:
+//     RGBA: BYTE[4], each pixel have 4 bytes in this order Red, Green, Blue, Alpha.
+//     Grayscale: BYTE[2], each pixel have 2 bytes in the order Value, Alpha.
+//     Indexed: BYTE, each pixel uses 1 byte (the index).
+// [TODO]
+
+// TILE: Tilemaps: Each tile can be a 8-bit (BYTE), 16-bit (WORD), or 32-bit
+// (DWORD) value and there are masks related to the meaning of each bit.
+// [TODO]
+
+// UUID: A Universally Unique Identifier stored as BYTE[16].
+uuid :: #type [16]byte
+
+// file structure
 
 HEADER_MAGIC_NUMBER: u16le : 0xA5E0
 
