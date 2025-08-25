@@ -525,6 +525,8 @@ readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
     assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
     advance = size_of(Header)
 
+    assert(.LayersHaveUUID in out.flags, message = "Layers with UUID are not currently supported")
+
     return
 }
 
@@ -586,24 +588,49 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     return
 }
 
+readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
+    offset: uintptr = 0
+
+    out.flags = (cast(^LayerFlagsSet)raw_data(data[offset:]))^;offset += size_of(LayerFlagsSet)
+    out.type = (cast(^LayerType)raw_data(data[offset:]))^;offset += size_of(LayerType)
+    out.childLevel = (cast(^Word)raw_data(data[offset:]))^;offset += size_of(Word)
+    out.width = (cast(^Word)raw_data(data[offset:]))^;offset += size_of(Word)
+    out.height = (cast(^Word)raw_data(data[offset:]))^;offset += size_of(Word)
+    out.blendMode = (cast(^LayerBlendMode)raw_data(data[offset:]))^;offset += size_of(LayerBlendMode)
+    out.opacity = (cast(^Byte)raw_data(data[offset:]))^;offset += size_of(Byte)
+    offset += size_of(Byte)*3
+    out.name = readString(data[offset:]); offset += uintptr(len(out.name))
+
+    if out.type == .Tilemap {
+        out.tilesetIndex = (cast(^Dword)raw_data(data[offset:]))^;offset += size_of(Dword)
+    }
+
+    // [TODO]: UUID for layers
+    // UUID only exists if .LayersHaveUUID flag is set in the file header. To
+    // parse it here we need to pass some kind of context
+
+    return
+}
+
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     out.header = (cast(^ChunkHeader)raw_data(data))^
     advance = uintptr(out.header.size)
 
     payloadOffset := size_of(ChunkHeader)
+    payloadData := data[payloadOffset:]
     switch out.header.type {
     case .OldPalette256:
         assert(false, "[TODO]: OldPalette256 chunk not supported")
     case .OldPalette64:
         assert(false, "[TODO]: OldPalette64 chunk not supported")
     case .Layer:
-        assert(false, "[TODO]: Layer chunk not supported")
+        out.payload = readChunkLayer(payloadData)
     case .Cel:
         assert(false, "[TODO]: Cel chunk not supported")
     case .CelExtra:
         assert(false, "[TODO]: CelExtra chunk not supported")
     case .ColorProfile:
-        out.payload = readChunkColorProfile(data[payloadOffset:])
+        out.payload = readChunkColorProfile(payloadData)
     case .ExternalFiles:
         assert(false, "[TODO]: ExternalFiles chunk not supported")
     case .Mask:
@@ -613,7 +640,7 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     case .Tags:
         assert(false, "[TODO]: Tags chunk not supported")
     case .Palette:
-        out.payload = readChunkPalette(data[payloadOffset:])
+        out.payload = readChunkPalette(payloadData)
     case .UserData:
         assert(false, "[TODO]: UserData chunk not supported")
     case .Slice:
