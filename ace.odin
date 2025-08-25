@@ -451,7 +451,7 @@ ChunkColorProfileFlags :: enum Word {
 
 ChunkColorProfile :: struct #packed {
     // WORD
-    type: ChunkColorProfileType,
+    type:  ChunkColorProfileType,
     // WORD
     flags: ChunkColorProfileFlags,
     // FIXED       Fixed gamma (1.0 = linear)
@@ -461,12 +461,46 @@ ChunkColorProfile :: struct #packed {
     //             gamma = 1.0, it means that this is Linear sRGB.
     gamma: Fixed,
     // BYTE[8]     Reserved (set to zero)
-    _: [8]Byte,
+    _:     [8]Byte,
 
     // [TODO]: ICC is unsupported
     // + If type = ICC:
     //   DWORD     ICC profile data length
     //   BYTE[]    ICC profile data. More info: http://www.color.org/ICC1V42.pdf
+}
+
+ChunkPaletteEntryFlags :: enum Word {
+    //   WORD      Entry flags:
+    //               1 = Has name
+    HasName = 1,
+}
+
+ChunkPaletteEntry :: struct #packed {
+    // + For each palette entry in [from,to] range (to-from+1 entries)
+    flags: ChunkPaletteEntryFlags,
+    //   BYTE      Red (0-255)
+    r:     Byte,
+    //   BYTE      Green (0-255)
+    g:     Byte,
+    //   BYTE      Blue (0-255)
+    b:     Byte,
+    //   BYTE      Alpha (0-255)
+    a:     Byte,
+    //   + If has name bit in entry flags
+    //     STRING  Color name
+    name:  string,
+}
+
+ChunkPalette :: struct #packed {
+    // DWORD       New palette size (total number of entries)
+    length:     Dword,
+    // DWORD       First color index to change
+    firstIndex: Dword,
+    // DWORD       Last color index to change
+    lastIndex:  Dword,
+    // BYTE[8]     For future (set to zero)
+    _:          [8]Byte,
+    entries:    []ChunkPaletteEntry,
 }
 
 ChunkPayload :: union #no_nil {
@@ -476,6 +510,7 @@ ChunkPayload :: union #no_nil {
     ChunkCel,
     ChunkCelExtra,
     ChunkColorProfile,
+    ChunkPalette,
 }
 
 Chunk :: struct {
@@ -485,7 +520,7 @@ Chunk :: struct {
 
 #assert(size_of(ChunkHeader) == 6)
 
-readHeader :: proc(data: []u8) -> (out: Header, advance: u32) {
+readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
     out = (cast(^Header)raw_data(data))^
     assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
     advance = size_of(Header)
@@ -493,7 +528,7 @@ readHeader :: proc(data: []u8) -> (out: Header, advance: u32) {
     return
 }
 
-readFrame :: proc(data: []u8) -> (out: Frame, advance: u32) {
+readFrame :: proc(data: []u8) -> (out: Frame, advance: uintptr) {
     out.header = (cast(^FrameHeader)raw_data(data))^
     assert(out.header.magicNumber == FRAME_MAGIC_NUMBER, message = "Invalid frame magic number!")
     advance = size_of(FrameHeader)
@@ -518,9 +553,42 @@ readChunkColorProfile :: proc(data: []u8) -> (out: ChunkColorProfile) {
     return
 }
 
-readChunk :: proc(data: []u8) -> (out: Chunk, advance: u32) {
+readString :: proc(data: []u8) -> (out: string) {
+    length := uintptr((cast(^Word)raw_data(data))^)
+    out = string(data[2:length + 2])
+
+    return
+}
+
+readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
+    out = (cast(^ChunkPalette)raw_data(data))^
+    out.entries = make([]ChunkPaletteEntry, out.length)
+
+    readPaletteEntry :: proc(data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
+        nameOffset :: offset_of(ChunkPaletteEntry, name)
+        out = (cast(^ChunkPaletteEntry)raw_data(data))^
+        if out.flags == .HasName {
+            out.name = readString(data[nameOffset:])
+        } else {
+            out.name = ""
+        }
+
+        return
+    }
+
+    offset: uintptr = offset_of(ChunkPalette, entries)
+    for i in 0 ..< out.length {
+        entry, advance := readPaletteEntry(data[offset:])
+        out.entries[i] = entry
+        offset += advance
+    }
+
+    return
+}
+
+readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     out.header = (cast(^ChunkHeader)raw_data(data))^
-    advance = u32(out.header.size)
+    advance = uintptr(out.header.size)
 
     payloadOffset := size_of(ChunkHeader)
     switch out.header.type {
@@ -545,7 +613,7 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: u32) {
     case .Tags:
         assert(false, "[TODO]: Tags chunk not supported")
     case .Palette:
-        assert(false, "[TODO]: Palette chunk not supported")
+        out.payload = readChunkPalette(data[payloadOffset:])
     case .UserData:
         assert(false, "[TODO]: UserData chunk not supported")
     case .Slice:
@@ -559,7 +627,7 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: u32) {
 }
 
 main :: proc() {
-    pointer: u32 = 0
+    pointer: uintptr = 0
     header, offset := readHeader(aseData)
     assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
     pointer += offset
