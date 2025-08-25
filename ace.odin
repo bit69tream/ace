@@ -411,11 +411,32 @@ ChunkCel :: struct {
     payload: ChunkCelPayload,
 }
 
+ChunkCelExtraFlags :: enum Dword {
+    // DWORD       Flags (set to zero)
+    //               1 = Precise bounds are set
+    PreciseBound = 1,
+}
+
+ChunkCelExtra :: struct {
+    flags:  ChunkCelExtraFlags,
+    // FIXED       Precise X position
+    x:      Fixed,
+    // FIXED       Precise Y position
+    y:      Fixed,
+    // FIXED       Width of the cel in the sprite (scaled in real-time)
+    width:  Fixed,
+    // FIXED       Height of the cel in the sprite
+    height: Fixed,
+    // BYTE[16]    For future use (set to zero)
+    _:      [16]Byte,
+}
+
 ChunkPayload :: union #no_nil {
     ChunkOldPalette256,
     ChunkOldPalette64,
     ChunkLayer,
     ChunkCel,
+    ChunkCelExtra,
 }
 
 Chunk :: struct {
