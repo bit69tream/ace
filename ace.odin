@@ -595,6 +595,10 @@ dataAs :: #force_inline proc(data: []u8, $T: typeid) -> T {
     return (cast(^T)raw_data(data))^
 }
 
+stringOffset :: proc(s: string) -> uintptr {
+    return uintptr(len(s) + size_of(Word))
+}
+
 readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
     offset: uintptr = 0
 
@@ -606,7 +610,7 @@ readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
     out.blendMode = dataAs(data[offset:], LayerBlendMode);offset += size_of(LayerBlendMode)
     out.opacity = dataAs(data[offset:], Byte);offset += size_of(Byte)
     offset += size_of(Byte) * 3
-    out.name = readString(data[offset:]);offset += uintptr(len(out.name))
+    out.name = readString(data[offset:]);offset += stringOffset(out.name)
 
     if out.type == .Tilemap {
         out.tilesetIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
