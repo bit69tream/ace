@@ -557,6 +557,164 @@ ChunkSlice :: struct {
     keys:     []ChunkSliceKey,
 }
 
+ChunkUserDataFlags :: enum Dword {
+    // DWORD       Flags
+    //               1 = Has text
+    HasText       = 0,
+    //               2 = Has color
+    HasColor      = 1,
+    //               4 = Has properties
+    HasProperties = 2,
+}
+ChunkUserDataFlagsSet :: bit_set[ChunkUserDataFlags;Dword]
+
+ChunkUserDataPropertyType :: enum Word {
+    //       + If type==0x0001 (bool)
+    //         BYTE    == 0 means FALSE
+    //                 != 0 means TRUE
+    Bool         = 0x0001,
+    //       + If type==0x0002 (int8)
+    //         BYTE
+    SignedByte   = 0x0002,
+    //       + If type==0x0003 (uint8)
+    //         BYTE
+    UnsignedByte = 0x0003,
+    //       + If type==0x0004 (int16)
+    //         SHORT
+    Short        = 0x0004,
+    //       + If type==0x0005 (uint16)
+    //         WORD
+    Word         = 0x0005,
+    //       + If type==0x0006 (int32)
+    //         LONG
+    Long         = 0x0006,
+    //       + If type==0x0007 (uint32)
+    //         DWORD
+    Dword        = 0x0007,
+    //       + If type==0x0008 (int64)
+    //         LONG64
+    Long64       = 0x0008,
+    //       + If type==0x0009 (uint64)
+    //         QWORD
+    Qword        = 0x0009,
+    //       + If type==0x000A
+    //         FIXED
+    Fixed        = 0x000A,
+    //       + If type==0x000B
+    //         FLOAT
+    Float        = 0x000B,
+    //       + If type==0x000C
+    //         DOUBLE
+    Double       = 0x000C,
+    //       + If type==0x000D
+    //         STRING
+    String       = 0x000D,
+    //       + If type==0x000E
+    //         POINT
+    Point        = 0x000E,
+    //       + If type==0x000F
+    //         SIZE
+    Size         = 0x000F,
+    //       + If type==0x0010
+    //         RECT
+    Rect         = 0x0010,
+    //       + If type==0x0011 (vector)
+    //         DWORD     Number of elements
+    //         WORD      Element's type.
+    //         + If Element's type == 0 (all elements are not of the same type)
+    //           For each element:
+    //             WORD      Element's type
+    //             BYTE[]    Element's value. Structure depends on the
+    //                       element's type
+    //         + Else (all elements are of the same type)
+    //           For each element:
+    //             BYTE[]    Element's value. Structure depends on the
+    //                       element's type
+    Vector       = 0x0011,
+    //       + If type==0x0012 (nested properties map)
+    //         DWORD     Number of properties
+    //         BYTE[]    Nested properties data
+    //                   Structure is the same as indicated in this loop
+    Nested       = 0x0012,
+    //       + If type==0x0013
+    //         UUID
+    UUID         = 0x0013,
+}
+
+ChunkUserDataPropertyPayload :: union #no_nil {
+    bool,
+    i8,
+    u8,
+    Short,
+    Word,
+    Long,
+    Dword,
+    Long64,
+    Qword,
+    Fixed,
+    Float,
+    Double,
+    string,
+    Point,
+    Size,
+    Rect,
+    // [TODO]: Vector property type is not supported because i just don't
+    // understand where is the documentation for vector element types.
+    // The words element and vector are not mentioned anywhere else in the spec
+    // aside from the UserData chunk segment, and that would be fine if they at
+    // least said what are the element types.
+    // The only thing I can think of is that they share the same types as
+    // properties, but then: why have both vector and an array of nested
+    // properties?
+    ChunkUserDataProperties,
+    Uuid,
+}
+
+ChunkUserDataProperty :: struct {
+    name:  string,
+    type:  ChunkUserDataPropertyType,
+    value: ChunkUserDataPropertyPayload,
+}
+
+ChunkUserDataProperties :: struct {
+    //     DWORD     Number of properties
+    propertyCount: Dword,
+    //     + For each property:
+    //       STRING    Name
+    //       WORD      Type
+    properties:    []ChunkUserDataProperty,
+}
+
+ChunkUserDataPropertyMap :: struct {
+    //   + For each properties map:
+    //     DWORD     Properties maps key
+    //               == 0 means user properties
+    //               != 0 means an extension Entry ID (see External Files Chunk))
+    key:           Dword,
+    using payload: ChunkUserDataProperties,
+}
+
+ChunkUserData :: struct {
+    flags:                 ChunkUserDataFlagsSet,
+    // + If flags have bit 1
+    //   STRING    Text
+    text:                  string,
+    // + If flags have bit 2
+    //   BYTE      Color Red (0-255)
+    //   BYTE      Color Green (0-255)
+    //   BYTE      Color Blue (0-255)
+    //   BYTE      Color Alpha (0-255)
+    r, g, b, a:            Byte,
+    // + If flags have bit 4
+    //   DWORD     Size in bytes of all properties maps stored in this chunk
+    //             The size includes the this field and the number of property maps
+    //             (so it will be a value greater or equal to 8 bytes).
+    propertiesPayloadSize: Dword,
+    //   DWORD     Number of properties maps
+    propertyMapsCount:     Dword,
+    propertyMaps:          []ChunkUserDataPropertyMap,
+}
+
 ChunkPayload :: union #no_nil {
     ChunkOldPalette256,
     ChunkOldPalette64,
@@ -566,6 +724,7 @@ ChunkPayload :: union #no_nil {
     ChunkColorProfile,
     ChunkPalette,
     ChunkSlice,
+    ChunkUserData,
 }
 
 Chunk :: struct {
