@@ -506,6 +506,57 @@ ChunkPalette :: struct #packed {
     entries:    []ChunkPaletteEntry,
 }
 
+ChunkSliceFlags :: enum Dword {
+    // DWORD       Flags
+    //               1 = It's a 9-patches slice
+    NinePatches = 0,
+    //               2 = Has pivot information
+    HasPivot    = 1,
+}
+ChunkSliceFlagsSet :: bit_set[ChunkSliceFlags;Dword]
+
+ChunkSliceKey :: struct {
+    // + For each slice key
+    //   DWORD     Frame number (this slice is valid from
+    //             this frame to the end of the animation)
+    frameNumber:  Dword,
+    //   LONG      Slice X origin coordinate in the sprite
+    xOrigin:      Long,
+    //   LONG      Slice Y origin coordinate in the sprite
+    yOrigin:      Long,
+    //   DWORD     Slice width (can be 0 if this slice hidden in the
+    //             animation from the given frame)
+    width:        Dword,
+    //   DWORD     Slice height
+    height:       Dword,
+    //   + If flags have bit 1
+    //     LONG    Center X position (relative to slice bounds)
+    centerX:      Long,
+    //     LONG    Center Y position
+    centerY:      Long,
+    //     DWORD   Center width
+    centerWidth:  Dword,
+    //     DWORD   Center height
+    centerHeight: Dword,
+    //   + If flags have bit 2
+    //     LONG    Pivot X position (relative to the slice origin)
+    pivotX:       Long,
+    //     LONG    Pivot Y position (relative to the slice origin)
+    pivotY:       Long,
+}
+
+ChunkSlice :: struct {
+    // DWORD       Number of "slice keys"
+    keyCount: Dword,
+    // DWORD
+    flags:    ChunkSliceFlagsSet,
+    // DWORD       Reserved
+    _:        Dword,
+    // STRING      Name
+    name:     string,
+    keys:     []ChunkSliceKey,
+}
+
 ChunkPayload :: union #no_nil {
     ChunkOldPalette256,
     ChunkOldPalette64,
@@ -514,6 +565,7 @@ ChunkPayload :: union #no_nil {
     ChunkCelExtra,
     ChunkColorProfile,
     ChunkPalette,
+    ChunkSlice,
 }
 
 Chunk :: struct {
@@ -623,6 +675,38 @@ readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
     return
 }
 
+readChunkSlice :: proc(data: []u8) -> (out: ChunkSlice) {
+    offset: uintptr = 0
+
+    out.keyCount = dataAs(data[offset:], Dword);offset += size_of(Dword)
+    out.flags = dataAs(data[offset:], ChunkSliceFlagsSet);offset += size_of(ChunkSliceFlagsSet)
+    offset += size_of(Dword)
+    out.name = readString(data[offset:]);offset += stringOffset(out.name)
+
+    out.keys = make([]ChunkSliceKey, out.keyCount)
+    for i in 0 ..< out.keyCount {
+        out.keys[i].frameNumber = dataAs(data[offset:], Dword);offset += size_of(Dword)
+        out.keys[i].xOrigin = dataAs(data[offset:], Long);offset += size_of(Long)
+        out.keys[i].yOrigin = dataAs(data[offset:], Long);offset += size_of(Long)
+        out.keys[i].width = dataAs(data[offset:], Dword);offset += size_of(Dword)
+        out.keys[i].height = dataAs(data[offset:], Dword);offset += size_of(Dword)
+
+        if .NinePatches in out.flags {
+            out.keys[i].centerX = dataAs(data[offset:], Long);offset += size_of(Long)
+            out.keys[i].centerY = dataAs(data[offset:], Long);offset += size_of(Long)
+            out.keys[i].centerWidth = dataAs(data[offset:], Dword);offset += size_of(Dword)
+            out.keys[i].centerHeight = dataAs(data[offset:], Dword);offset += size_of(Dword)
+        }
+
+        if .HasPivot in out.flags {
+            out.keys[i].pivotX = dataAs(data[offset:], Long);offset += size_of(Long)
+            out.keys[i].pivotY = dataAs(data[offset:], Long);offset += size_of(Long)
+        }
+    }
+
+    return
+}
+
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     out.header = dataAs(data, ChunkHeader)
     advance = uintptr(out.header.size)
@@ -655,7 +739,7 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     case .UserData:
         assert(false, "[TODO]: UserData chunk not supported")
     case .Slice:
-        assert(false, "[TODO]: Slice chunk not supported")
+        out.payload = readChunkSlice(payloadData)
     case .Tileset:
         assert(false, "[TODO]: Tileset chunk not supported")
     }
