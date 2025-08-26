@@ -418,9 +418,10 @@ ChunkCelExtraFlags :: enum Dword {
     //               1 = Precise bounds are set
     PreciseBound = 1,
 }
+ChunkCelExtraFlagsSet :: bit_set[ChunkCelExtraFlags;Dword]
 
 ChunkCelExtra :: struct {
-    flags:  ChunkCelExtraFlags,
+    flags:  ChunkCelExtraFlagsSet,
     // FIXED       Precise X position
     x:      Fixed,
     // FIXED       Precise Y position
@@ -448,12 +449,13 @@ ChunkColorProfileFlags :: enum Word {
     //               1 - use special fixed gamma
     UseFixedGamma = 1,
 }
+ChunkColorProfileFlagsSet :: bit_set[ChunkColorProfileFlags;Word]
 
 ChunkColorProfile :: struct #packed {
     // WORD
     type:  ChunkColorProfileType,
     // WORD
-    flags: ChunkColorProfileFlags,
+    flags: ChunkColorProfileFlagsSet,
     // FIXED       Fixed gamma (1.0 = linear)
     //             Note: The gamma in sRGB is 2.2 in overall but it doesn't use
     //             this fixed gamma, because sRGB uses different gamma sections
@@ -474,10 +476,11 @@ ChunkPaletteEntryFlags :: enum Word {
     //               1 = Has name
     HasName = 1,
 }
+ChunkPaletteEntryFlagsSet :: bit_set[ChunkPaletteEntryFlags;Word]
 
 ChunkPaletteEntry :: struct #packed {
     // + For each palette entry in [from,to] range (to-from+1 entries)
-    flags: ChunkPaletteEntryFlags,
+    flags: ChunkPaletteEntryFlagsSet,
     //   BYTE      Red (0-255)
     r:     Byte,
     //   BYTE      Green (0-255)
@@ -569,7 +572,7 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     readPaletteEntry :: proc(data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
         nameOffset :: offset_of(ChunkPaletteEntry, name)
         out = dataAs(data, ChunkPaletteEntry)
-        if out.flags == .HasName {
+        if .HasName in out.flags {
             out.name = readString(data[nameOffset:])
         } else {
             out.name = ""
