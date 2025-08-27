@@ -750,8 +750,6 @@ readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
     assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
     advance = size_of(Header)
 
-    assert(.LayersHaveUUID not_in out.flags, message = "Layers with UUID are not currently supported")
-
     return
 }
 
@@ -838,9 +836,10 @@ readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
         out.tilesetIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
     }
 
-    // [TODO]: UUID for layers
-    // UUID only exists if .LayersHaveUUID flag is set in the file header. To
-    // parse it here we need to pass some kind of context
+    // The caller sets context.user_index to 1 if .LayersHaveUUID flag is set in the header
+    if context.user_index == 1 {
+        out.uuid = dataAs(data[offset:], Uuid)
+    }
 
     return
 }
@@ -923,6 +922,8 @@ main :: proc() {
     header, offset := readHeader(aseData)
     assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
     pointer += offset
+
+    context.user_index = int(.LayersHaveUUID in header.flags)
 
     fmt.printfln("%#v", header)
 
