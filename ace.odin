@@ -53,7 +53,6 @@ Rect :: struct {
 //     RGBA: BYTE[4], each pixel have 4 bytes in this order Red, Green, Blue, Alpha.
 //     Grayscale: BYTE[2], each pixel have 2 bytes in the order Value, Alpha.
 //     Indexed: BYTE, each pixel uses 1 byte (the index).
-// [TODO]
 PixelRGBA :: struct {
     r, g, b, a: Byte,
 }
@@ -72,10 +71,10 @@ Pixel :: union #no_nil {
 // Current spec states that at the moment TILE is always 32-bit, therefore i
 // think it's fine to only support that size
 // https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md#cel-chunk-0x2005
-Tile :: #type Dword
+Tile :: distinct Dword
 
 // UUID: A Universally Unique Identifier stored as BYTE[16].
-Uuid :: #type [16]Byte
+Uuid :: distinct [16]Byte
 
 // file structure
 
@@ -619,17 +618,6 @@ ChunkUserDataPropertyType :: enum Word {
     //         RECT
     Rect         = 0x0010,
     //       + If type==0x0011 (vector)
-    //         DWORD     Number of elements
-    //         WORD      Element's type.
-    //         + If Element's type == 0 (all elements are not of the same type)
-    //           For each element:
-    //             WORD      Element's type
-    //             BYTE[]    Element's value. Structure depends on the
-    //                       element's type
-    //         + Else (all elements are of the same type)
-    //           For each element:
-    //             BYTE[]    Element's value. Structure depends on the
-    //                       element's type
     Vector       = 0x0011,
     //       + If type==0x0012 (nested properties map)
     //         DWORD     Number of properties
@@ -640,6 +628,36 @@ ChunkUserDataPropertyType :: enum Word {
     //         UUID
     UUID         = 0x0013,
 }
+
+ChunkUserDataVectorElementTagged :: struct {
+    type: ChunkUserDataVectorElementType,
+    value: []Byte,
+}
+
+ChunkUserDataVectorElementSimple :: #type []Byte
+
+ChunkUserDataVectorElement :: union #no_nil {
+    // + If Element's type == 0 (all elements are not of the same type)
+    //   For each element:
+    //     WORD      Element's type
+    //     BYTE[]    Element's value. Structure depends on the
+    //               element's type
+    // + Else (all elements are of the same type)
+    //   For each element:
+    //     BYTE[]    Element's value. Structure depends on the
+    //               element's type
+    ChunkUserDataVectorElementTagged, ChunkUserDataVectorElementSimple
+}
+
+ChunkUserDataVector :: struct {
+    //         DWORD     Number of elements
+    length: Dword,
+    //         WORD      Element's type.
+    elementType: ChunkUserDataVectorElementType,
+    elements: []ChunkUserDataVectorElement,
+}
+
+ChunkUserDataVectorElementType :: #type ChunkUserDataPropertyType
 
 ChunkUserDataPropertyPayload :: union #no_nil {
     bool,
@@ -658,14 +676,7 @@ ChunkUserDataPropertyPayload :: union #no_nil {
     Point,
     Size,
     Rect,
-    // [TODO]: Vector property type is not supported because i just don't
-    // understand where is the documentation for vector element types.
-    // The words element and vector are not mentioned anywhere else in the spec
-    // aside from the UserData chunk segment, and that would be fine if they at
-    // least said what are the element types.
-    // The only thing I can think of is that they share the same types as
-    // properties, but then: why have both vector and an array of nested
-    // properties?
+    ChunkUserDataVector,
     ChunkUserDataProperties,
     Uuid,
 }
