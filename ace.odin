@@ -6,6 +6,11 @@ import "core:math/fixed"
 @(rodata)
 aseData := #load("./tilemap.ase", []u8)
 
+Ctx :: struct {
+    colorDepth:     ColorDepth,
+    layersHaveUUID: bool,
+}
+
 // SPEC: https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md
 
 // data types
@@ -836,8 +841,8 @@ readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
         out.tilesetIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
     }
 
-    // The caller sets context.user_index to 1 if .LayersHaveUUID flag is set in the header
-    if context.user_index == 1 {
+    ctx := (cast(^Ctx)context.user_ptr)^
+    if ctx.layersHaveUUID {
         out.uuid = dataAs(data[offset:], Uuid)
     }
 
@@ -923,7 +928,11 @@ main :: proc() {
     assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
     pointer += offset
 
-    context.user_index = int(.LayersHaveUUID in header.flags)
+    ctx := Ctx {
+        colorDepth     = header.colorDepth,
+        layersHaveUUID = .LayersHaveUUID in header.flags,
+    }
+    context.user_ptr = &ctx
 
     fmt.printfln("%#v", header)
 
