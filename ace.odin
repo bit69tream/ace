@@ -635,7 +635,7 @@ ChunkUserDataPropertyType :: enum Word {
 }
 
 ChunkUserDataVectorElementTagged :: struct {
-    type: ChunkUserDataVectorElementType,
+    type:  ChunkUserDataVectorElementType,
     value: []Byte,
 }
 
@@ -651,15 +651,16 @@ ChunkUserDataVectorElement :: union #no_nil {
     //   For each element:
     //     BYTE[]    Element's value. Structure depends on the
     //               element's type
-    ChunkUserDataVectorElementTagged, ChunkUserDataVectorElementSimple
+    ChunkUserDataVectorElementTagged,
+    ChunkUserDataVectorElementSimple,
 }
 
 ChunkUserDataVector :: struct {
     //         DWORD     Number of elements
-    length: Dword,
+    length:      Dword,
     //         WORD      Element's type.
     elementType: ChunkUserDataVectorElementType,
-    elements: []ChunkUserDataVectorElement,
+    elements:    []ChunkUserDataVectorElement,
 }
 
 ChunkUserDataVectorElementType :: #type ChunkUserDataPropertyType
@@ -881,6 +882,30 @@ readChunkSlice :: proc(data: []u8) -> (out: ChunkSlice) {
     return
 }
 
+readChunkUserData :: proc(data: []u8) -> (out: ChunkUserData) {
+    offset := uintptr(0)
+    out.flags = dataAs(data[offset:], ChunkUserDataFlagsSet);offset += size_of(ChunkUserDataFlagsSet)
+
+    if .HasText in out.flags {
+        out.text = readString(data[offset:]);offset += stringOffset(out.text)
+    }
+
+    if .HasColor in out.flags {
+        out.r = data[offset];offset += size_of(Byte)
+        out.g = data[offset];offset += size_of(Byte)
+        out.b = data[offset];offset += size_of(Byte)
+        out.a = data[offset];offset += size_of(Byte)
+    }
+
+    if .HasProperties in out.flags {
+        out.propertiesPayloadSize = dataAs(data[offset:], Dword);offset += size_of(Dword)
+        out.propertyMapsCount = dataAs(data[offset:], Dword);offset += size_of(Dword)
+
+        panic("Property maps are not supported yet")
+    }
+
+    return
+}
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     out.header = dataAs(data, ChunkHeader)
     advance = uintptr(out.header.size)
@@ -911,7 +936,7 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     case .Palette:
         out.payload = readChunkPalette(payloadData)
     case .UserData:
-        assert(false, "[TODO]: UserData chunk not supported")
+        out.payload = readChunkUserData(payloadData)
     case .Slice:
         out.payload = readChunkSlice(payloadData)
     case .Tileset:
