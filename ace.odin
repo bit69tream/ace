@@ -1,5 +1,7 @@
 package ace
 
+import "core:bytes"
+import "core:compress/zlib"
 import "core:fmt"
 import "core:math/fixed"
 
@@ -58,10 +60,10 @@ Rect :: struct {
 //     RGBA: BYTE[4], each pixel have 4 bytes in this order Red, Green, Blue, Alpha.
 //     Grayscale: BYTE[2], each pixel have 2 bytes in the order Value, Alpha.
 //     Indexed: BYTE, each pixel uses 1 byte (the index).
-PixelRGBA :: struct {
+PixelRGBA :: struct #packed {
     r, g, b, a: Byte,
 }
-PixelGrayscale :: struct {
+PixelGrayscale :: struct #packed {
     value, alpha: Byte,
 }
 PixelIndexed :: distinct Byte
@@ -92,6 +94,11 @@ HeaderFlags :: enum Dword {
 }
 HeaderFlagsSet :: distinct bit_set[HeaderFlags;Dword]
 
+ColorDepth :: enum Word {
+    Indexed   = 8,
+    Grayscale = 16,
+    RGBA      = 32,
+}
 
 Header :: struct #packed {
     // DWORD       File size
@@ -108,7 +115,7 @@ Header :: struct #packed {
     //               32 bpp = RGBA
     //               16 bpp = Grayscale
     //               8 bpp = Indexed
-    colorDepth:   Word,
+    colorDepth:   ColorDepth,
     // DWORD       Flags (see NOTE.6):
     //               1 = Layer opacity has valid value
     //               2 = Layer blend mode/opacity is valid for groups
@@ -906,12 +913,76 @@ readChunkUserData :: proc(data: []u8) -> (out: ChunkUserData) {
 
     return
 }
+
+readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadCompressedImage) {
+    offset := uintptr(0)
+
+    img.width = dataAs(data[offset:], Word);offset += size_of(Word)
+    img.height = dataAs(data[offset:], Word);offset += size_of(Word)
+    img.data = make([]Pixel, img.width * img.height)
+
+    buf: bytes.Buffer
+    err := zlib.inflate(data[offset:], &buf)
+    defer bytes.buffer_destroy(&buf)
+
+    if err != nil {
+        fmt.printfln("Cannot inflate image data: %v", err)
+        panic("")
+    }
+
+    assert(len(buf.buf) == int(img.width * img.height))
+
+    ctx := (cast(^Ctx)context.user_ptr)^
+
+    d := data[offset:]
+    switch ctx.colorDepth {
+    case .Indexed:
+        for i in 0 ..< (img.width * img.height) {
+            img.data[i] = PixelIndexed(buf.buf[i])
+        }
+    case .Grayscale:
+        for i in 0 ..< (img.width * img.height) {
+            img.data[i] = dataAs(buf.buf[i * size_of(PixelGrayscale):], PixelGrayscale)
+        }
+    case .RGBA:
+        for i in 0 ..< (img.width * img.height) {
+            img.data[i] = dataAs(buf.buf[i * size_of(PixelRGBA):], PixelRGBA)
+        }
+    }
+
+    return
+}
+
+readChunkCel :: proc(data: []u8) -> (out: ChunkCel) {
+    offset := uintptr(0)
+    out.index = dataAs(data[offset:], Word);offset += size_of(Word)
+    out.x = dataAs(data[offset:], Short);offset += size_of(Short)
+    out.y = dataAs(data[offset:], Short);offset += size_of(Short)
+    out.opacity = dataAs(data[offset:], Byte);offset += size_of(Byte)
+    out.type = dataAs(data[offset:], ChunkCelType);offset += size_of(ChunkCelType)
+    out.z = dataAs(data[offset:], Short);offset += size_of(Short)
+    offset += 5
+
+    switch out.type {
+    case .Raw:
+        panic("Raw Cel chunks are not supported")
+    case .Linked:
+        panic("Linked Cel chunks are not supported")
+    case .CompressedImage:
+        out.payload = readCompressedImage(data[offset:])
+    case .CompressedTilemap:
+        panic("Compressed tilemap Cel chunks are not supported")
+    }
+
+    return
+}
+
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     out.header = dataAs(data, ChunkHeader)
     advance = uintptr(out.header.size)
 
     payloadOffset := size_of(ChunkHeader)
-    payloadData := data[payloadOffset:]
+    payloadData := data[payloadOffset:advance]
     switch out.header.type {
     case .OldPalette256:
         assert(false, "[TODO]: OldPalette256 chunk not supported")
@@ -920,7 +991,7 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     case .Layer:
         out.payload = readChunkLayer(payloadData)
     case .Cel:
-        assert(false, "[TODO]: Cel chunk not supported")
+        out.payload = readChunkCel(payloadData)
     case .CelExtra:
         assert(false, "[TODO]: CelExtra chunk not supported")
     case .ColorProfile:
