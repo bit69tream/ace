@@ -770,6 +770,7 @@ Chunk :: struct {
 
 #assert(size_of(ChunkHeader) == 6)
 
+@(private)
 readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
     out = dataAs(data, Header)
     assert(out.magicNumber == HEADER_MAGIC_NUMBER, message = "Invalid header magic number!")
@@ -778,6 +779,7 @@ readHeader :: proc(data: []u8) -> (out: Header, advance: uintptr) {
     return
 }
 
+@(private)
 readFrame :: proc(data: []u8) -> (out: Frame, advance: uintptr) {
     out.header = dataAs(data, FrameHeader)
     assert(out.header.magicNumber == FRAME_MAGIC_NUMBER, message = "Invalid frame magic number!")
@@ -796,6 +798,7 @@ readFrame :: proc(data: []u8) -> (out: Frame, advance: uintptr) {
     return
 }
 
+@(private)
 readChunkColorProfile :: proc(data: []u8) -> (out: ChunkColorProfile) {
     out = dataAs(data, ChunkColorProfile)
     assert(out.type != .EmbeddedICC, "Embedded ICC profiles are not supported")
@@ -803,6 +806,7 @@ readChunkColorProfile :: proc(data: []u8) -> (out: ChunkColorProfile) {
     return
 }
 
+@(private)
 readString :: proc(data: []u8) -> (out: string) {
     length := uintptr(dataAs(data, Word))
     out = string(data[2:length + 2])
@@ -810,6 +814,7 @@ readString :: proc(data: []u8) -> (out: string) {
     return
 }
 
+@(private)
 readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     offset := uintptr(0)
     out.length = dataAs(data[offset:], Dword);offset += size_of(Dword)
@@ -845,14 +850,17 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     return
 }
 
+@(private)
 dataAs :: #force_inline proc(data: []u8, $T: typeid) -> T {
     return (cast(^T)raw_data(data))^
 }
 
+@(private)
 stringOffset :: proc(s: string) -> uintptr {
     return uintptr(len(s) + size_of(Word))
 }
 
+@(private)
 readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
     offset: uintptr = 0
 
@@ -878,6 +886,7 @@ readChunkLayer :: proc(data: []u8) -> (out: ChunkLayer) {
     return
 }
 
+@(private)
 readChunkSlice :: proc(data: []u8) -> (out: ChunkSlice) {
     offset: uintptr = 0
 
@@ -910,6 +919,7 @@ readChunkSlice :: proc(data: []u8) -> (out: ChunkSlice) {
     return
 }
 
+@(private)
 readChunkUserData :: proc(data: []u8) -> (out: ChunkUserData) {
     offset := uintptr(0)
     out.flags = dataAs(data[offset:], ChunkUserDataFlagsSet);offset += size_of(ChunkUserDataFlagsSet)
@@ -973,6 +983,7 @@ readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadImage) {
     return
 }
 
+@(private)
 readChunkCel :: proc(data: []u8) -> (out: ChunkCel) {
     offset := uintptr(0)
     out.index = dataAs(data[offset:], Word);offset += size_of(Word)
@@ -997,6 +1008,7 @@ readChunkCel :: proc(data: []u8) -> (out: ChunkCel) {
     return
 }
 
+@(private)
 readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     out.header = dataAs(data, ChunkHeader)
     advance = uintptr(out.header.size)
