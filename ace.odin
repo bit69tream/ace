@@ -370,25 +370,14 @@ ChunkCelType :: enum Word {
     CompressedTilemap = 3,
 }
 
-ChunkCelPayloadRaw :: struct {
-    // + For cel type = 0 (Raw Image Data)
-    //   WORD      Width in pixels
-    width:  Word,
-    //   WORD      Height in pixels
-    height: Word,
-    //   PIXEL[]   Raw pixel data: row by row from top to bottom,
-    //             for each scanline read pixels from left to right.
-    data:   []Pixel,
-}
-
 ChunkCelPayloadLinked :: struct {
     // + For cel type = 1 (Linked Cel)
     //   WORD      Frame position to link with
     framePosition: Word,
 }
 
-ChunkCelPayloadCompressedImage :: struct {
-    // + For cel type = 2 (Compressed Image)
+ChunkCelPayloadImage :: struct {
+    // + For cel type = 0 or 2 (Raw Image or Compressed Image)
     //   WORD      Width in pixels
     width:  Word,
     //   WORD      Height in pixels
@@ -414,16 +403,15 @@ ChunkCelPayloadCompressedTilemap :: struct {
     //   DWORD     Bitmask for diagonal flip (swap X/Y axis)
     diagonalFlipBitmask: Dword,
     //   BYTE[10]  Reserved
-    _:                   [10]Byte,
+    _:                   [10]Byte `fmt:"-"`,
     //   TILE[]    Row by row, from top to bottom tile by tile
     //             compressed with ZLIB method (see NOTE.3)
     data:                []Tile,
 }
 
 ChunkCelPayload :: union #no_nil {
-    ChunkCelPayloadRaw,
     ChunkCelPayloadLinked,
-    ChunkCelPayloadCompressedImage,
+    ChunkCelPayloadImage,
     ChunkCelPayloadCompressedTilemap,
 }
 
@@ -947,7 +935,8 @@ readChunkUserData :: proc(data: []u8) -> (out: ChunkUserData) {
     return
 }
 
-readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadCompressedImage) {
+@(private)
+readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadImage) {
     offset := uintptr(0)
 
     img.width = dataAs(data[offset:], Word);offset += size_of(Word)
