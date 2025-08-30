@@ -23,6 +23,8 @@ package ace
 import "core:bytes"
 import "core:compress/zlib"
 import "core:fmt"
+import "core:image"
+import "core:image/qoi"
 import "core:math/fixed"
 import "core:os"
 
@@ -1077,4 +1079,88 @@ readFile :: proc(path: string) -> File {
     }
 
     return readFileFromMemory(data)
+}
+
+// The returned `image.Image` struct has `width`, `height`, `channels`, `depth`
+// and `pixels` fields set. User then needs to set the `which` field to the
+// corresponding value if they wish to save the file in that format.
+// Example:
+// ```odin
+// file := ace.readFile("test.ase")
+// img := ace.flatten(file)
+// img.which = .QOI
+// qoi.save_to_file("test.qoi", &img)
+// ```
+flatten :: proc(f: File, frameIndex: int = 0) -> image.Image {
+    PIXEL_COMPONENTS :: 4
+
+    byteCount: int = int(f.header.width * f.header.height) * PIXEL_COMPONENTS
+    buf := make([dynamic]byte, byteCount)
+
+    cels: [dynamic]ChunkCel
+    palette: ChunkPalette
+    for c in f.frames[frameIndex].chunks {
+        #partial switch c.type {
+        case .Cel:
+            append(&cels, c.payload.(ChunkCel))
+        case .Palette:
+            if palette.length != 0 {
+                panic("More than one palette chunk")
+            }
+            palette = c.payload.(ChunkPalette)
+        }
+    }
+
+    // [NOTE]: we can probably just assume that cel chunks appear in order they
+    // are supposed to be processed in
+    // also [NOTE]: right now we will not support mixing colors as it is not
+    // something i need yet
+
+    for c in cels {
+        // [NOTE]: we do not support any other cel type
+        p := c.payload.(ChunkCelPayloadImage)
+        xOrigin := uint(c.x)
+        yOrigin := uint(c.y)
+
+        for x in 0 ..< uint(p.width) {
+            for y in 0 ..< uint(p.height) {
+                bufI := (x + xOrigin) * PIXEL_COMPONENTS + uint(f.header.width * PIXEL_COMPONENTS) * (y + yOrigin)
+                celI := x + uint(p.width) * y
+                pix := p.data[celI]
+
+                switch px in pix {
+                case PixelRGBA:
+                    buf[bufI + 0] = px.r
+                    buf[bufI + 1] = px.g
+                    buf[bufI + 2] = px.b
+                    buf[bufI + 3] = px.a
+                case PixelGrayscale:
+                    buf[bufI + 0] = px.value
+                    buf[bufI + 1] = px.value
+                    buf[bufI + 2] = px.value
+                    buf[bufI + 3] = px.alpha
+                case PixelIndexed:
+                    col := palette.entries[px]
+                    buf[bufI + 0] = col.r
+                    buf[bufI + 1] = col.g
+                    buf[bufI + 2] = col.b
+                    buf[bufI + 3] = col.a
+                }
+            }
+        }
+    }
+
+    bb := bytes.Buffer {
+        buf = buf,
+    }
+
+    img := image.Image {
+        width    = int(f.header.width),
+        height   = int(f.header.height),
+        channels = PIXEL_COMPONENTS,
+        depth    = 8,
+        pixels   = bb,
+    }
+
+    return img
 }
