@@ -963,8 +963,6 @@ readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadCompressedImage)
         panic("")
     }
 
-    assert(len(buf.buf) == int(img.width * img.height))
-
     ctx := (cast(^Ctx)context.user_ptr)^
 
     readPixels :: proc(buf: []u8, imgdata: ^[]Pixel, width, height: u16le, $T: typeid) {
