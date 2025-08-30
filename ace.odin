@@ -6,9 +6,6 @@ import "core:fmt"
 import "core:math/fixed"
 import "core:os"
 
-@(rodata)
-aseData := #load("./tilemap.ase", []u8)
-
 @(private)
 Ctx :: struct {
     colorDepth:     ColorDepth,
@@ -1061,9 +1058,4 @@ readFile :: proc (path: string) -> File {
     }
 
     return readFileFromMemory(data)
-}
-
-main :: proc() {
-    file := readFile("./tilemap.ase")
-    fmt.printfln("%#v", file.header)
 }
