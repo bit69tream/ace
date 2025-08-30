@@ -799,24 +799,33 @@ readString :: proc(data: []u8) -> (out: string) {
 }
 
 readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
-    out = dataAs(data, ChunkPalette)
-    out.entries = make([]ChunkPaletteEntry, out.length)
+    offset := uintptr(0)
+    out.length = dataAs(data[offset:], Dword); offset += size_of(Dword)
+    out.firstIndex = dataAs(data[offset:], Dword); offset += size_of(Dword)
+    out.lastIndex = dataAs(data[offset:], Dword); offset += size_of(Dword)
+    offset += 8
 
-    readPaletteEntry :: proc(data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
-        nameOffset :: offset_of(ChunkPaletteEntry, name)
-        out = dataAs(data, ChunkPaletteEntry)
+    readChunkPaletteEntry :: proc (data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
+        offset := uintptr(0)
+
+        out.flags = dataAs(data[offset:], ChunkPaletteEntryFlagsSet); offset += size_of(ChunkPaletteEntryFlagsSet)
+        out.r = dataAs(data[offset:], Byte); offset += size_of(Byte)
+        out.g = dataAs(data[offset:], Byte); offset += size_of(Byte)
+        out.b = dataAs(data[offset:], Byte); offset += size_of(Byte)
+        out.a = dataAs(data[offset:], Byte); offset += size_of(Byte)
+
         if .HasName in out.flags {
-            out.name = readString(data[nameOffset:])
-        } else {
-            out.name = ""
+            out.name = readString(data[offset:]); offset += stringOffset(out.name)
         }
+
+        advance = offset
 
         return
     }
 
-    offset: uintptr = offset_of(ChunkPalette, entries)
-    for i in 0 ..< out.length {
-        entry, advance := readPaletteEntry(data[offset:])
+    out.entries = make([]ChunkPaletteEntry, out.length)
+    for i in 0..<out.length {
+        entry, advance := readChunkPaletteEntry(data[offset:])
         out.entries[i] = entry
         offset += advance
     }
