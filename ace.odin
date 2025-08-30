@@ -968,7 +968,7 @@ readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadCompressedImage)
     ctx := (cast(^Ctx)context.user_ptr)^
 
     readPixels :: proc(buf: []u8, imgdata: ^[]Pixel, width, height: u16le, $T: typeid) {
-        for i in 0 ..< (img.width * img.height) {
+        for i in 0 ..< (width * height) {
             imgdata[i] = dataAs(buf[i * size_of(T):], T)
         }
     }
