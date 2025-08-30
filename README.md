@@ -25,7 +25,7 @@ import "ace"
 SOMETHING_DATA := #load("./something.ase")
 
 main :: proc() {
-    file := readFile("./something.ase")
-    file2 := readFileFromMemory(SOMETHING_DATA)
+    file := ace.readFile("./something.ase")
+    file2 := ace.readFileFromMemory(SOMETHING_DATA)
 }
 ```
