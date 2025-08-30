@@ -967,20 +967,20 @@ readCompressedImage :: proc(data: []u8) -> (img: ChunkCelPayloadCompressedImage)
 
     ctx := (cast(^Ctx)context.user_ptr)^
 
+    readPixels :: proc(buf: []u8, imgdata: ^[]Pixel, width, height: u16le, $T: typeid) {
+        for i in 0 ..< (img.width * img.height) {
+            imgdata[i] = dataAs(buf[i * size_of(T):], T)
+        }
+    }
+
     d := data[offset:]
     switch ctx.colorDepth {
     case .Indexed:
-        for i in 0 ..< (img.width * img.height) {
-            img.data[i] = PixelIndexed(buf.buf[i])
-        }
+        readPixels(buf.buf[:], &img.data, img.width, img.height, PixelIndexed)
     case .Grayscale:
-        for i in 0 ..< (img.width * img.height) {
-            img.data[i] = dataAs(buf.buf[i * size_of(PixelGrayscale):], PixelGrayscale)
-        }
+        readPixels(buf.buf[:], &img.data, img.width, img.height, PixelGrayscale)
     case .RGBA:
-        for i in 0 ..< (img.width * img.height) {
-            img.data[i] = dataAs(buf.buf[i * size_of(PixelRGBA):], PixelRGBA)
-        }
+        readPixels(buf.buf[:], &img.data, img.width, img.height, PixelRGBA)
     }
 
     return
@@ -1062,7 +1062,7 @@ readFileFromMemory :: proc(data: []u8) -> (out: File) {
     context.user_ptr = &ctx
 
     out.frames = make([]Frame, out.header.frames)
-    for i in 0..<out.header.frames {
+    for i in 0 ..< out.header.frames {
         f, adv := readFrame(data[offset:])
         out.frames[i] = f
         offset += adv
@@ -1071,10 +1071,10 @@ readFileFromMemory :: proc(data: []u8) -> (out: File) {
     return
 }
 
-readFile :: proc (path: string) -> File {
+readFile :: proc(path: string) -> File {
     data, ok := os.read_entire_file(path)
     if !ok {
-        panic("Error: cannot read file");
+        panic("Error: cannot read file")
     }
 
     return readFileFromMemory(data)
