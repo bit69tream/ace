@@ -4,10 +4,12 @@ import "core:bytes"
 import "core:compress/zlib"
 import "core:fmt"
 import "core:math/fixed"
+import "core:os"
 
 @(rodata)
 aseData := #load("./tilemap.ase", []u8)
 
+@(private)
 Ctx :: struct {
     colorDepth:     ColorDepth,
     layersHaveUUID: bool,
@@ -84,6 +86,11 @@ Tile :: distinct Dword
 Uuid :: distinct [16]Byte
 
 // file structure
+
+File :: struct {
+    header: Header,
+    frames: []Frame,
+}
 
 HEADER_MAGIC_NUMBER: Word : 0xA5E0
 
@@ -800,22 +807,22 @@ readString :: proc(data: []u8) -> (out: string) {
 
 readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     offset := uintptr(0)
-    out.length = dataAs(data[offset:], Dword); offset += size_of(Dword)
-    out.firstIndex = dataAs(data[offset:], Dword); offset += size_of(Dword)
-    out.lastIndex = dataAs(data[offset:], Dword); offset += size_of(Dword)
+    out.length = dataAs(data[offset:], Dword);offset += size_of(Dword)
+    out.firstIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
+    out.lastIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
     offset += 8
 
-    readChunkPaletteEntry :: proc (data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
+    readChunkPaletteEntry :: proc(data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
         offset := uintptr(0)
 
-        out.flags = dataAs(data[offset:], ChunkPaletteEntryFlagsSet); offset += size_of(ChunkPaletteEntryFlagsSet)
-        out.r = dataAs(data[offset:], Byte); offset += size_of(Byte)
-        out.g = dataAs(data[offset:], Byte); offset += size_of(Byte)
-        out.b = dataAs(data[offset:], Byte); offset += size_of(Byte)
-        out.a = dataAs(data[offset:], Byte); offset += size_of(Byte)
+        out.flags = dataAs(data[offset:], ChunkPaletteEntryFlagsSet);offset += size_of(ChunkPaletteEntryFlagsSet)
+        out.r = dataAs(data[offset:], Byte);offset += size_of(Byte)
+        out.g = dataAs(data[offset:], Byte);offset += size_of(Byte)
+        out.b = dataAs(data[offset:], Byte);offset += size_of(Byte)
+        out.a = dataAs(data[offset:], Byte);offset += size_of(Byte)
 
         if .HasName in out.flags {
-            out.name = readString(data[offset:]); offset += stringOffset(out.name)
+            out.name = readString(data[offset:]);offset += stringOffset(out.name)
         }
 
         advance = offset
@@ -824,7 +831,7 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     }
 
     out.entries = make([]ChunkPaletteEntry, out.length)
-    for i in 0..<out.length {
+    for i in 0 ..< out.length {
         entry, advance := readChunkPaletteEntry(data[offset:])
         out.entries[i] = entry
         offset += advance
@@ -1022,28 +1029,41 @@ readChunk :: proc(data: []u8) -> (out: Chunk, advance: uintptr) {
     case .Tileset:
         assert(false, "[TODO]: Tileset chunk not supported")
     }
-    fmt.printfln("%#v", out)
 
     return
 }
 
-main :: proc() {
-    pointer: uintptr = 0
-    header, offset := readHeader(aseData)
-    assert(header.fileSize == u32le(len(aseData)), "File size from the header doesn't match with the real file size")
-    pointer += offset
+readFileFromMemory :: proc(data: []u8) -> (out: File) {
+    offset := uintptr(0)
+    out.header, offset = readHeader(data)
+    assert(out.header.fileSize == u32le(len(data)), "File size from the header doesn't match with the real file size")
 
     ctx := Ctx {
-        colorDepth     = header.colorDepth,
-        layersHaveUUID = .LayersHaveUUID in header.flags,
+        colorDepth     = out.header.colorDepth,
+        layersHaveUUID = .LayersHaveUUID in out.header.flags,
     }
     context.user_ptr = &ctx
 
-    fmt.printfln("%#v", header)
+    out.frames = make([]Frame, out.header.frames)
+    for i in 0..<out.header.frames {
+        f, adv := readFrame(data[offset:])
+        out.frames[i] = f
+        offset += adv
+    }
 
-    frame: Frame
-    frame, offset = readFrame(aseData[pointer:])
-    pointer += offset
+    return
+}
 
-    fmt.printfln("%#v", frame)
+readFile :: proc (path: string) -> File {
+    data, ok := os.read_entire_file(path)
+    if !ok {
+        panic("Error: cannot read file");
+    }
+
+    return readFileFromMemory(data)
+}
+
+main :: proc() {
+    file := readFile("./tilemap.ase")
+    fmt.printfln("%#v", file.header)
 }
