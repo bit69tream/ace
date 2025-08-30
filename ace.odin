@@ -151,14 +151,14 @@ Header :: struct #packed {
     //             from each frame header
     speed:        Word,
     // DWORD       Set be 0
-    _:            Dword,
+    _:            Dword `fmt:"-"`,
     // DWORD       Set be 0
-    _:            Dword,
+    _:            Dword `fmt:"-"`,
     // BYTE        Palette entry (index) which represent transparent color
     //             in all non-background layers (only for Indexed sprites).
     paletteEntry: Byte,
     // BYTE[3]     Ignore these bytes
-    _:            [3]Byte,
+    _:            [3]Byte `fmt:"-"`,
     // WORD        Number of colors (0 means 256 for old sprites)
     colorCount:   Word,
     // BYTE        Pixel width (pixel ratio is "pixel width/pixel height").
@@ -176,7 +176,7 @@ Header :: struct #packed {
     // WORD        Grid height (zero if there is no grid)
     gridHeight:   Word,
     // BYTE[84]    For future (set to zero)
-    _:            [84]Byte,
+    _:            [84]Byte `fmt:"-"`,
 }
 
 #assert(size_of(Header) == 128)
@@ -196,7 +196,7 @@ FrameHeader :: struct #packed {
     // WORD        Frame duration (in milliseconds)
     frameDuration: Word,
     // BYTE[2]     For future (set to zero)
-    _:             [2]Byte,
+    _:             [2]Byte `fmt:"-"`,
     // DWORD       New field which specifies the number of "chunks"
     //             in this frame (if this is 0, use the old field)
     chunksNew:     Dword,
@@ -347,7 +347,7 @@ ChunkLayer :: struct {
     // BYTE        Opacity (see NOTE.6)
     opacity:      Byte,
     // BYTE[3]     For future (set to zero)
-    _:            [3]Byte,
+    _:            [3]Byte `fmt:"-"`,
     // STRING      Layer name
     name:         string,
     // + If layer type = 2
@@ -444,7 +444,7 @@ ChunkCel :: struct {
     //             -N = show this cel N layers back
     z:       Short,
     // BYTE[5]     For future (set to zero)
-    _:       [5]Byte,
+    _:       [5]Byte `fmt:"-"`,
     payload: ChunkCelPayload,
 }
 
@@ -466,7 +466,7 @@ ChunkCelExtra :: struct {
     // FIXED       Height of the cel in the sprite
     height: Fixed,
     // BYTE[16]    For future use (set to zero)
-    _:      [16]Byte,
+    _:      [16]Byte `fmt:"-"`,
 }
 
 ChunkColorProfileType :: enum Word {
@@ -498,7 +498,7 @@ ChunkColorProfile :: struct #packed {
     //             gamma = 1.0, it means that this is Linear sRGB.
     gamma: Fixed,
     // BYTE[8]     Reserved (set to zero)
-    _:     [8]Byte,
+    _:     [8]Byte `fmt:"-"`,
 
     // [TODO]: ICC is unsupported
     // + If type = ICC:
@@ -537,7 +537,7 @@ ChunkPalette :: struct #packed {
     // DWORD       Last color index to change
     lastIndex:  Dword,
     // BYTE[8]     For future (set to zero)
-    _:          [8]Byte,
+    _:          [8]Byte `fmt:"-"`,
     entries:    []ChunkPaletteEntry,
 }
 
@@ -586,7 +586,7 @@ ChunkSlice :: struct {
     // DWORD
     flags:    ChunkSliceFlagsSet,
     // DWORD       Reserved
-    _:        Dword,
+    _:        Dword `fmt:"-"`,
     // STRING      Name
     name:     string,
     keys:     []ChunkSliceKey,
