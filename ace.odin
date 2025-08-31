@@ -27,11 +27,14 @@ import "core:image"
 import "core:image/qoi"
 import "core:math/fixed"
 import "core:os"
+import "core:math"
+import "core:mem"
 
 @(private)
 Ctx :: struct {
     colorDepth:     ColorDepth,
     layersHaveUUID: bool,
+    palette:        [dynamic]PixelRGBA,
 }
 
 // SPEC: https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md
@@ -107,8 +110,9 @@ Uuid :: distinct [16]Byte
 // file structure
 
 File :: struct {
-    header: Header,
-    frames: []Frame,
+    header:  Header,
+    frames:  []Frame,
+    palette: []PixelRGBA,
 }
 
 HEADER_MAGIC_NUMBER: Word : 0xA5E0
@@ -824,6 +828,8 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
     out.lastIndex = dataAs(data[offset:], Dword);offset += size_of(Dword)
     offset += 8
 
+    ctx := cast(^Ctx)context.user_ptr
+
     readChunkPaletteEntry :: proc(data: []u8) -> (out: ChunkPaletteEntry, advance: uintptr) {
         offset := uintptr(0)
 
@@ -847,6 +853,8 @@ readChunkPalette :: proc(data: []u8) -> (out: ChunkPalette) {
         entry, advance := readChunkPaletteEntry(data[offset:])
         out.entries[i] = entry
         offset += advance
+
+        append(&ctx.palette, PixelRGBA{entry.r, entry.g, entry.b, entry.a})
     }
 
     return
@@ -1069,6 +1077,8 @@ readFileFromMemory :: proc(data: []u8) -> (out: File) {
         offset += adv
     }
 
+    out.palette = ctx.palette[:]
+
     return
 }
 
@@ -1084,7 +1094,7 @@ readFile :: proc(path: string) -> File {
 // The returned `image.Image` struct has `width`, `height`, `channels`, `depth`
 // and `pixels` fields set. User then needs to set the `which` field to the
 // corresponding value if they wish to save the file in that format.
-// Example:
+// # Example:
 // ```odin
 // file := ace.readFile("test.ase")
 // img := ace.flatten(file)
@@ -1098,23 +1108,61 @@ flatten :: proc(f: File, frameIndex: int = 0) -> image.Image {
     buf := make([dynamic]byte, byteCount)
 
     cels: [dynamic]ChunkCel
-    palette: ChunkPalette
     for c in f.frames[frameIndex].chunks {
         #partial switch c.type {
         case .Cel:
             append(&cels, c.payload.(ChunkCel))
-        case .Palette:
-            if palette.length != 0 {
-                panic("More than one palette chunk")
-            }
-            palette = c.payload.(ChunkPalette)
+        }
+    }
+
+    pixelToRGBAComponents :: proc(px: Pixel, palette: []PixelRGBA) -> [4]u8 {
+        switch p in px {
+        case PixelRGBA:
+            return [4]u8{p.r, p.g, p.b, p.a}
+        case PixelGrayscale:
+            return [4]u8{p.value, p.value, p.value, p.alpha}
+        case PixelIndexed:
+            col := palette[p]
+            return [4]u8{col.r, col.g, col.b, col.a}
+        }
+
+        panic("unreachable")
+    }
+
+    normalizeColor :: proc (c: [4]u8) -> [4]f32 {
+        return [4]f32 {
+            f32(c.r) / 255.,
+            f32(c.g) / 255.,
+            f32(c.b) / 255.,
+            f32(c.a) / 255.,
+        }
+    }
+
+    mixColors :: proc(a, b: [4]u8) -> [4]u8 {
+        out := [4]f32{}
+        a := normalizeColor(a)
+        b := normalizeColor(b)
+
+        // r.A = 1 - (1 - fg.A) * (1 - bg.A); // 0.75
+        // r.R = fg.R * fg.A / r.A + bg.R * bg.A * (1 - fg.A) / r.A; // 0.67
+        // r.G = fg.G * fg.A / r.A + bg.G * bg.A * (1 - fg.A) / r.A; // 0.33
+        // r.B = fg.B * fg.A / r.A + bg.B * bg.A * (1 - fg.A) / r.A; // 0.00
+
+        out.a = 1. - (1. - b.a) * (1. - a.a)
+        out.r = b.r * b.a / out.a + a.r * a.a * (1. - b.a) / out.a;
+        out.g = b.g * b.a / out.a + a.g * a.a * (1. - b.a) / out.a;
+        out.b = b.b * b.a / out.a + a.b * a.a * (1. - b.a) / out.a;
+
+        return [4]u8 {
+            u8(math.round(out.r*255.)),
+            u8(math.round(out.g*255.)),
+            u8(math.round(out.b*255.)),
+            u8(math.round(out.a*255.)),
         }
     }
 
     // [NOTE]: we can probably just assume that cel chunks appear in order they
     // are supposed to be processed in
-    // also [NOTE]: right now we will not support mixing colors as it is not
-    // something i need yet
 
     for c in cels {
         // [NOTE]: we do not support any other cel type
@@ -1126,26 +1174,11 @@ flatten :: proc(f: File, frameIndex: int = 0) -> image.Image {
             for y in 0 ..< uint(p.height) {
                 bufI := (x + xOrigin) * PIXEL_COMPONENTS + uint(f.header.width * PIXEL_COMPONENTS) * (y + yOrigin)
                 celI := x + uint(p.width) * y
-                pix := p.data[celI]
+                originalPixel: [4]u8 = (cast(^[4]u8)raw_data(buf[bufI:bufI+3]))^
+                celPixel := pixelToRGBAComponents(p.data[celI], f.palette)
+                mixedPx := mixColors(originalPixel, celPixel)
 
-                switch px in pix {
-                case PixelRGBA:
-                    buf[bufI + 0] = px.r
-                    buf[bufI + 1] = px.g
-                    buf[bufI + 2] = px.b
-                    buf[bufI + 3] = px.a
-                case PixelGrayscale:
-                    buf[bufI + 0] = px.value
-                    buf[bufI + 1] = px.value
-                    buf[bufI + 2] = px.value
-                    buf[bufI + 3] = px.alpha
-                case PixelIndexed:
-                    col := palette.entries[px]
-                    buf[bufI + 0] = col.r
-                    buf[bufI + 1] = col.g
-                    buf[bufI + 2] = col.b
-                    buf[bufI + 3] = col.a
-                }
+                mem.copy(&buf[bufI], &mixedPx[0], len(mixedPx))
             }
         }
     }
