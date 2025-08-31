@@ -1192,3 +1192,38 @@ flatten :: proc(f: File, frameIndex: int = 0) -> image.Image {
 
     return img
 }
+
+Slice :: struct {
+    name:         string,
+    data:         string,
+    using bounds: ChunkSliceKey,
+}
+
+getSlices :: proc(f: File, frameIndex: int = 0) -> []Slice {
+    out: [dynamic]Slice
+
+    readSliceChunk := false
+    for c in f.frames[frameIndex].chunks {
+        if c.type == .Slice {
+            readSliceChunk = true
+            s := c.payload.(ChunkSlice)
+
+            assert(s.keyCount == 1)
+            append(&out, Slice {
+                name = s.name,
+                bounds = s.keys[0]
+            })
+        } else if c.type == .UserData {
+            i := len(out)-1
+            u := c.payload.(ChunkUserData)
+
+            if .HasText in u.flags {
+                out[i].data = u.text
+            }
+        } else {
+            readSliceChunk = false
+        }
+    }
+
+    return out[:]
+}
