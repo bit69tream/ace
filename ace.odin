@@ -24,11 +24,10 @@ import "core:bytes"
 import "core:compress/zlib"
 import "core:fmt"
 import "core:image"
-import "core:image/qoi"
-import "core:math/fixed"
-import "core:os"
 import "core:math"
+import "core:math/fixed"
 import "core:mem"
+import "core:os"
 
 @(private)
 Ctx :: struct {
@@ -1129,36 +1128,32 @@ flatten :: proc(f: File, frameIndex: int = 0) -> image.Image {
         panic("unreachable")
     }
 
-    normalizeColor :: proc (c: [4]u8) -> [4]f32 {
-        return [4]f32 {
-            f32(c.r) / 255.,
-            f32(c.g) / 255.,
-            f32(c.b) / 255.,
-            f32(c.a) / 255.,
-        }
+    normalizeColor :: proc(c: [4]u8) -> [4]f32 {
+        return [4]f32{f32(c.r) / 255., f32(c.g) / 255., f32(c.b) / 255., f32(c.a) / 255.}
     }
 
     mixColors :: proc(a, b: [4]u8) -> [4]u8 {
-        out := [4]f32{}
-        a := normalizeColor(a)
-        b := normalizeColor(b)
-
-        // r.A = 1 - (1 - fg.A) * (1 - bg.A); // 0.75
-        // r.R = fg.R * fg.A / r.A + bg.R * bg.A * (1 - fg.A) / r.A; // 0.67
-        // r.G = fg.G * fg.A / r.A + bg.G * bg.A * (1 - fg.A) / r.A; // 0.33
-        // r.B = fg.B * fg.A / r.A + bg.B * bg.A * (1 - fg.A) / r.A; // 0.00
-
-        out.a = 1. - (1. - b.a) * (1. - a.a)
-        out.r = b.r * b.a / out.a + a.r * a.a * (1. - b.a) / out.a;
-        out.g = b.g * b.a / out.a + a.g * a.a * (1. - b.a) / out.a;
-        out.b = b.b * b.a / out.a + a.b * a.a * (1. - b.a) / out.a;
-
-        return [4]u8 {
-            u8(math.round(out.r*255.)),
-            u8(math.round(out.g*255.)),
-            u8(math.round(out.b*255.)),
-            u8(math.round(out.a*255.)),
+        if b.a == 0 {
+            return a
+        } else if a.a == 0 {
+            return b
         }
+
+        a := [4]int{int(a.r), int(a.g), int(a.b), int(a.a)}
+
+        b := [4]int{int(b.r), int(b.g), int(b.b), int(b.a)}
+
+        r := [4]int{}
+
+        t := b.a * a.a + 0x80
+        t = ((((t) >> 8) + (t)) >> 8)
+        r.a = b.a + a.a - t
+
+        r.r = a.r + (b.r - a.r) * b.a / r.a
+        r.g = a.g + (b.g - a.g) * b.a / r.a
+        r.b = a.b + (b.b - a.b) * b.a / r.a
+
+        return [4]u8{u8(r.r), u8(r.g), u8(r.b), u8(r.a)}
     }
 
     // [NOTE]: we can probably just assume that cel chunks appear in order they
@@ -1174,11 +1169,11 @@ flatten :: proc(f: File, frameIndex: int = 0) -> image.Image {
             for y in 0 ..< uint(p.height) {
                 bufI := (x + xOrigin) * PIXEL_COMPONENTS + uint(f.header.width * PIXEL_COMPONENTS) * (y + yOrigin)
                 celI := x + uint(p.width) * y
-                originalPixel: [4]u8 = (cast(^[4]u8)raw_data(buf[bufI:bufI+3]))^
+                originalPixel: [4]u8 = (cast(^[4]u8)raw_data(buf[bufI:]))^
                 celPixel := pixelToRGBAComponents(p.data[celI], f.palette)
-                mixedPx := mixColors(originalPixel, celPixel)
+                mixedPixel := mixColors(originalPixel, celPixel)
 
-                mem.copy(&buf[bufI], &mixedPx[0], len(mixedPx))
+                mem.copy(&buf[bufI], &mixedPixel[0], len(mixedPixel))
             }
         }
     }
